@@ -1,15 +1,15 @@
 import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { fileURLToPath, pathToFileURL } from 'node:url';
 import { APP_NAME } from './shared/constants.js';
+import { ApiError, dispatchApi } from './electron/api/registry.js';
 import { registerCoreApi } from './electron/api/coreApi.js';
 import { setAppContext } from './electron/context.js';
-import { createEnvReader } from './electron/envConfig.js';
-import { createServerManager } from './electron/httpServer.js';
+import { startDevRenderer } from './electron/devRenderer.js';
 import { registerModules } from './electron/modules/index.js';
 import { runtime } from './electron/runtime.js';
-import { createTrayController } from './electron/tray.js';
+import { getRememberedFolder, rememberFolder } from './electron/settingsService.js';
 import { hideTitleBarIcon } from './electron/windowIcon.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -36,7 +36,7 @@ function resolveStorage() {
   const portable = !isDev && fs.existsSync(path.join(exeDir, '.portable'));
 
   if (isDev) {
-    // Own userData so a dev run never fights an installed copy for the instance lock.
+    // Own userData so a dev run never shares browser data with an installed copy.
     app.setPath('userData', path.join(__dirname, '.dev-userdata'));
   } else if (portable) {
     app.setPath('userData', path.join(exeDir, 'data-cache'));
@@ -56,39 +56,20 @@ function resolveStorage() {
 const storage = resolveStorage();
 
 /* -------------------------------------------------------------------------- */
-/* single instance                                                            */
+/* startup                                                                    */
 /* -------------------------------------------------------------------------- */
+
+// No single-instance lock on purpose: the program can be started again while
+// it is running, and every instance is an independent window.
 
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
-let isQuitting = false;
-/** @type {ReturnType<typeof createServerManager> | null} */
-let serverManager = null;
-/** @type {ReturnType<typeof createTrayController> | null} */
-let trayController = null;
+/** Folder the window loads its UI from (dist/ or the dev watch build). */
+let rendererDir = '';
+/** @type {{ close: () => Promise<void> } | null} */
+let devRenderer = null;
 
-const gotLock = app.requestSingleInstanceLock();
-if (!gotLock) {
-  app.whenReady().then(() => {
-    dialog.showMessageBoxSync({
-      type: 'info',
-      title: APP_NAME,
-      message: '프로그램이 이미 실행 중입니다.',
-      buttons: ['확인'],
-    });
-    app.exit(0);
-  });
-} else {
-  app.on('second-instance', focusMainWindow);
-  app.whenReady().then(boot).catch(fatal);
-}
-
-function focusMainWindow() {
-  if (!mainWindow || mainWindow.isDestroyed()) return;
-  if (mainWindow.isMinimized()) mainWindow.restore();
-  mainWindow.show();
-  mainWindow.focus();
-}
+app.whenReady().then(boot).catch(fatal);
 
 /** @param {unknown} error */
 function fatal(error) {
@@ -98,17 +79,15 @@ function fatal(error) {
   app.exit(1);
 }
 
-/* -------------------------------------------------------------------------- */
-/* boot                                                                       */
-/* -------------------------------------------------------------------------- */
-
 async function boot() {
   fs.mkdirSync(storage.stateRoot, { recursive: true });
+
+  rendererDir = isDev ? path.join(__dirname, '.dev-dist') : path.join(__dirname, 'dist');
 
   setAppContext({
     isDev,
     projectRoot: __dirname,
-    distDir: path.join(__dirname, 'dist'),
+    distDir: rendererDir,
     stateRoot: storage.stateRoot,
     portable: storage.portable,
   });
@@ -124,39 +103,24 @@ async function boot() {
   registerCoreApi();
   registerModules();
 
-  serverManager = createServerManager({
-    isDev,
-    projectRoot: __dirname,
-    distDir: path.join(__dirname, 'dist'),
-    env: createEnvReader([storage.exeDir, storage.stateRoot, ...(isDev ? [__dirname] : [])]),
-  });
-  runtime.server = serverManager;
-
-  let info;
-  try {
-    info = await serverManager.start();
-  } catch (err) {
-    if (err?.code === 'EADDRINUSE') {
-      throw new Error(
-        '내부 서버 포트가 이미 사용 중입니다.\n다른 프로그램을 종료하거나 .env 의 APP_PORT 를 바꿔 주세요.',
-      );
-    }
-    throw err;
+  if (isDev) {
+    devRenderer = await startDevRenderer({
+      projectRoot: __dirname,
+      outDir: rendererDir,
+      onRebuilt: () => {
+        if (mainWindow && !mainWindow.isDestroyed()) mainWindow.webContents.reloadIgnoringCache();
+      },
+    });
+  } else if (!fs.existsSync(path.join(rendererDir, 'index.html'))) {
+    throw new Error('화면 파일(dist/index.html)을 찾을 수 없습니다. `npm run build` 를 먼저 실행하세요.');
   }
 
   setupMenu();
   registerIpc();
-  createMainWindow(info.appUrl);
-  trayController = createTrayController({
-    resolveIconPath,
-    getMainWindow: () => mainWindow,
-    focusMainWindow,
-    quitApp: quitFromTray,
-  });
-  trayController.create();
+  createMainWindow();
 
   app.on('activate', () => {
-    focusMainWindow();
+    if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
   });
 }
 
@@ -172,12 +136,13 @@ function resolveIconPath() {
   return candidates.find((candidate) => fs.existsSync(candidate));
 }
 
-/** @param {string} url */
+/** True for pages of this app's own UI (files inside the renderer folder). @param {string} url */
 function isAppUrl(url) {
   try {
     const parsed = new URL(url);
-    const info = serverManager?.info();
-    return /^https?:$/.test(parsed.protocol) && Number(parsed.port) === info?.port;
+    if (parsed.protocol !== 'file:') return false;
+    const file = path.resolve(fileURLToPath(parsed));
+    return file === path.resolve(rendererDir) || file.startsWith(path.resolve(rendererDir) + path.sep);
   } catch {
     return false;
   }
@@ -188,11 +153,11 @@ function openExternalSafe(url) {
   if (/^(https?:|mailto:)/i.test(url)) void shell.openExternal(url);
 }
 
-/** @param {string} appUrl */
-function createMainWindow(appUrl) {
+function createMainWindow() {
   const icon = resolveIconPath();
+  const appUrl = pathToFileURL(path.join(rendererDir, 'index.html')).href;
 
-  mainWindow = new BrowserWindow({
+  const win = new BrowserWindow({
     width: 1280,
     height: 800,
     minWidth: 960,
@@ -209,8 +174,8 @@ function createMainWindow(appUrl) {
       sandbox: true,
     },
   });
+  mainWindow = win;
 
-  const win = mainWindow;
   // The title-bar icon can only be removed from a window that is already shown
   // (Windows re-applies the icon on first show), so show it invisibly, drop the
   // icon, then fade it in — no flash of the icon.
@@ -224,10 +189,6 @@ function createMainWindow(appUrl) {
   win.webContents.on('did-fail-load', (_event, code, description, url, isMainFrame) => {
     if (!isMainFrame) return;
     console.error(`[window] load failed: ${description} (${code}) ${url}`);
-    // The server may not be ready yet — try once more.
-    setTimeout(() => {
-      if (!win.isDestroyed()) void win.loadURL(url || appUrl);
-    }, 800);
   });
 
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -252,28 +213,11 @@ function createMainWindow(appUrl) {
     }
   });
 
-  // X closes → hide to tray (Exit in the tray menu actually quits).
-  win.on('close', (event) => {
-    if (!isQuitting) {
-      event.preventDefault();
-      win.hide();
-    }
-  });
-
   win.on('closed', () => {
-    mainWindow = null;
+    if (mainWindow === win) mainWindow = null;
   });
 
   void win.loadURL(appUrl);
-}
-
-function quitFromTray() {
-  isQuitting = true;
-  if (mainWindow && !mainWindow.isDestroyed()) {
-    mainWindow.removeAllListeners('close');
-    mainWindow.close();
-  }
-  app.quit();
 }
 
 function setupMenu() {
@@ -292,11 +236,50 @@ function setupMenu() {
 }
 
 /* -------------------------------------------------------------------------- */
-/* IPC (native bridge exposed to the window by preload.cjs)                   */
+/* IPC — the only way the window talks to the backend (no network port)       */
 /* -------------------------------------------------------------------------- */
 
+/** Only this app's own page, in its own window, may call the backend. */
+function isTrustedSender(event) {
+  const win = BrowserWindow.fromWebContents(event.sender);
+  return Boolean(win) && !win.isDestroyed() && isAppUrl(event.senderFrame?.url ?? '');
+}
+
+/**
+ * @param {string} channel
+ * @param {(event: import('electron').IpcMainInvokeEvent, ...args: any[]) => unknown} handler
+ */
+function handleTrusted(channel, handler) {
+  ipcMain.handle(channel, (event, ...args) => {
+    if (!isTrustedSender(event)) throw new Error('허용되지 않은 요청입니다.');
+    return handler(event, ...args);
+  });
+}
+
+/** Window that sent an IPC call (dialogs attach to it). @param {import('electron').IpcMainInvokeEvent} event */
+const senderWindow = (event) => BrowserWindow.fromWebContents(event.sender) ?? undefined;
+
 function registerIpc() {
-  ipcMain.handle('frame:getInfo', () => ({
+  /** Backend RPC (electron/api/registry.js). Errors are returned, not thrown, so their message survives IPC. */
+  ipcMain.handle('api:call', async (event, name, body) => {
+    if (!isTrustedSender(event)) return { ok: false, status: 403, error: '허용되지 않은 요청입니다.' };
+    try {
+      const result = await dispatchApi(String(name ?? ''), body);
+      return { ok: true, data: result === undefined ? null : JSON.parse(JSON.stringify(result)) };
+    } catch (error) {
+      if (error instanceof ApiError) {
+        return { ok: false, status: error.status, error: error.message, ...error.extra };
+      }
+      console.error('[api] unexpected error:', error);
+      return {
+        ok: false,
+        status: 500,
+        error: error instanceof Error ? error.message : '처리 중 오류가 발생했습니다.',
+      };
+    }
+  });
+
+  handleTrusted('frame:getInfo', () => ({
     platform: process.platform,
     arch: process.arch,
     stateRoot: storage.stateRoot,
@@ -304,12 +287,12 @@ function registerIpc() {
     isDev,
   }));
 
-  ipcMain.handle('frame:openExternal', (_event, url) => {
+  handleTrusted('frame:openExternal', (_event, url) => {
     openExternalSafe(String(url ?? ''));
   });
 
   /** Reveals the state folder (or a sub-folder of it) in the OS file manager. */
-  ipcMain.handle('frame:openStateFolder', async (_event, sub = '') => {
+  handleTrusted('frame:openStateFolder', async (_event, sub = '') => {
     const root = path.resolve(storage.stateRoot);
     const target = path.resolve(root, String(sub ?? ''));
     if (target !== root && !target.startsWith(root + path.sep)) return false;
@@ -317,30 +300,38 @@ function registerIpc() {
     return (await shell.openPath(target)) === '';
   });
 
-  ipcMain.handle('frame:pickDirectory', async () => {
-    const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
-    const result = await dialog.showOpenDialog(parent, {
-      title: '폴더 선택',
+  // `options.memoryKey`: the dialog opens in the folder last chosen for that key,
+  // and the new choice is remembered for next time (settings.json → folders).
+  handleTrusted('frame:pickDirectory', async (event, options = {}) => {
+    const memoryKey = typeof options?.memoryKey === 'string' ? options.memoryKey : '';
+    const defaultPath = memoryKey ? getRememberedFolder(memoryKey) : '';
+    const result = await dialog.showOpenDialog(senderWindow(event), {
+      title: typeof options?.title === 'string' ? options.title : '폴더 선택',
       properties: ['openDirectory'],
+      ...(defaultPath ? { defaultPath } : {}),
     });
     if (result.canceled || !result.filePaths[0]) return { canceled: true, path: '' };
+    if (memoryKey) void rememberFolder(memoryKey, result.filePaths[0]).catch(() => undefined);
     return { canceled: false, path: result.filePaths[0] };
   });
 
-  ipcMain.handle('frame:pickOpenFiles', async (_event, options = {}) => {
-    const parent = mainWindow && !mainWindow.isDestroyed() ? mainWindow : undefined;
+  handleTrusted('frame:pickOpenFiles', async (event, options = {}) => {
     const filters = Array.isArray(options?.filters) ? options.filters : undefined;
     const multi = options?.multi !== false;
-    const result = await dialog.showOpenDialog(parent, {
+    const memoryKey = typeof options?.memoryKey === 'string' ? options.memoryKey : '';
+    const defaultPath = memoryKey ? getRememberedFolder(memoryKey) : '';
+    const result = await dialog.showOpenDialog(senderWindow(event), {
       title: typeof options?.title === 'string' ? options.title : '파일 선택',
       properties: multi ? ['openFile', 'multiSelections'] : ['openFile'],
       filters,
+      ...(defaultPath ? { defaultPath } : {}),
     });
     if (result.canceled || result.filePaths.length === 0) return { canceled: true, paths: [] };
+    if (memoryKey) void rememberFolder(memoryKey, path.dirname(result.filePaths[0])).catch(() => undefined);
     return { canceled: false, paths: result.filePaths };
   });
 
-  ipcMain.handle('frame:showItemInFolder', (_event, targetPath) => {
+  handleTrusted('frame:showItemInFolder', (_event, targetPath) => {
     const resolved = path.resolve(String(targetPath ?? ''));
     if (!resolved || !fs.existsSync(resolved)) return false;
     shell.showItemInFolder(resolved);
@@ -352,25 +343,11 @@ function registerIpc() {
 /* shutdown                                                                   */
 /* -------------------------------------------------------------------------- */
 
+// Closing the window quits this instance (other running instances are unaffected).
 app.on('window-all-closed', () => {
-  // Main window hides to tray — keep the app and server running.
+  app.quit();
 });
 
-let quitCleanupStarted = false;
-
-app.on('before-quit', (event) => {
-  isQuitting = true;
-  if (quitCleanupStarted) return;
-  quitCleanupStarted = true;
-
-  trayController?.destroy();
-  trayController = null;
-  if (!serverManager) return;
-
-  // Release the port before the process exits.
-  event.preventDefault();
-  void serverManager
-    .stop()
-    .catch((err) => console.warn('[server] stop failed:', err))
-    .finally(() => app.exit(0));
+app.on('before-quit', () => {
+  void devRenderer?.close().catch(() => undefined);
 });

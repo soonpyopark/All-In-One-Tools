@@ -8,7 +8,13 @@ import {
 } from '../../shared/constants.js';
 import { normalizeAccentColor } from '../../shared/theme.js';
 import { runtime } from '../runtime.js';
-import { getPublicSettings, getSettings, updateSettings } from '../settingsService.js';
+import {
+  getPublicSettings,
+  getRememberedFolder,
+  getSettings,
+  rememberFolder,
+  updateSettings,
+} from '../settingsService.js';
 import { fetchLatestRelease } from '../updateService.js';
 import { defineApi } from './registry.js';
 
@@ -42,6 +48,14 @@ export function registerCoreApi() {
   defineApi('update.check', () => fetchLatestRelease());
 
   defineApi('settings.get', () => settingsPayload());
+
+  /** Folder remembered for `key` (last input / output folder of a screen), '' if none. */
+  defineApi('folders.get', (body) => ({ path: getRememberedFolder(String(body?.key ?? '')) }));
+
+  defineApi('folders.set', async (body) => {
+    await rememberFolder(String(body?.key ?? ''), typeof body?.path === 'string' ? body.path : '');
+    return { path: getRememberedFolder(String(body?.key ?? '')) };
+  });
 
   defineApi('settings.update', async (body) => {
     /** @type {Record<string, unknown>} */

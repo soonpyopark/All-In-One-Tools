@@ -17,14 +17,11 @@ export const APP_VERSION = '1.0.0';
  */
 export const APP_BUILD_STAMP = '261029_165448';
 
-/** Default port of the local (127.0.0.1) server the Electron window talks to. */
-export const DEFAULT_PORT = 3001;
-
 /**
  * GitHub repository (`owner/repo`) whose latest release is used by the
  * 업데이트 확인 button. Leave empty until the project has a release page.
  */
-export const UPDATE_REPO = '';
+export const UPDATE_REPO = 'soonpyopark/All-tools';
 
 /** Content hash of build/icon-source.png (scripts/prepare-icons.mjs). */
 export { APP_ICON_REV } from './iconRev.js';

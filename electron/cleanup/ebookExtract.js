@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { PDFDocument } from 'pdf-lib';
 import sharp from 'sharp';
 
 const IMAGE_EXTS = new Set(['.jpg', '.jpeg', '.png', '.gif', '.webp', '.bmp']);
@@ -575,12 +576,82 @@ function changeStats(a, b) {
 }
 
 /* -------------------------------------------------------------------------- */
+/* pdf                                                                        */
+/* -------------------------------------------------------------------------- */
+
+/** Largest page edge the PDF format allows (points). */
+const PDF_MAX_EDGE = 14400;
+
+/**
+ * File name of the merged PDF: empty → `output.pdf`; any folder part and
+ * characters Windows does not allow are dropped; `.pdf` is added when missing.
+ *
+ * @param {unknown} raw
+ */
+export function normalizePdfName(raw) {
+  let name = path.basename(String(raw ?? '').trim().replace(/\\/g, '/'));
+  name = name.replace(/[<>:"/\\|?*\u0000-\u001f]/g, '').replace(/[. ]+$/g, '').trim();
+  name = name.replace(/\.pdf$/i, '').replace(/[. ]+$/g, '');
+  if (!name || /^(con|prn|aux|nul|com\d|lpt\d)$/i.test(name)) name = 'output';
+  return `${name}.pdf`;
+}
+
+/**
+ * Merges `pagesDir/0001.png …` into one PDF, one page per image sized to the image.
+ * Written to a temporary file first so a cancelled run never leaves a broken PDF.
+ *
+ * @param {{
+ *   pagesDir: string,
+ *   pageCount: number,
+ *   target: string,
+ *   quality: 'jpeg' | 'png',
+ *   signal?: AbortSignal,
+ *   onProgress?: (ratio: number) => void,
+ *   log?: (line: string) => void,
+ * }} args
+ * @returns {Promise<string>} path of the PDF
+ */
+async function buildPdf({ pagesDir, pageCount, target, quality, signal, onProgress, log }) {
+  const doc = await PDFDocument.create();
+
+  for (let n = 1; n <= pageCount; n += 1) {
+    if (signal?.aborted) throw new Error('작업이 취소되었습니다.');
+    const file = path.join(pagesDir, `${String(n).padStart(4, '0')}.png`);
+    const png = fs.readFileSync(file);
+
+    let image;
+    if (quality === 'png') {
+      image = await doc.embedPng(png);
+    } else {
+      const jpeg = await sharp(png).flatten({ background: '#ffffff' }).jpeg({ quality: 90, chromaSubsampling: '4:4:4' }).toBuffer();
+      image = await doc.embedJpg(jpeg);
+    }
+
+    const scale = Math.min(1, PDF_MAX_EDGE / Math.max(image.width, image.height));
+    const width = image.width * scale;
+    const height = image.height * scale;
+    const page = doc.addPage([width, height]);
+    page.drawImage(image, { x: 0, y: 0, width, height });
+    onProgress?.(n / pageCount);
+  }
+
+  const bytes = await doc.save();
+  if (signal?.aborted) throw new Error('작업이 취소되었습니다.');
+  const tmp = `${target}.tmp`;
+  fs.writeFileSync(tmp, bytes);
+  fs.renameSync(tmp, target);
+  log?.(`PDF 저장: ${path.basename(target)} (${pageCount}쪽, ${(bytes.length / 1024 / 1024).toFixed(1)} MB)`);
+  return target;
+}
+
+/* -------------------------------------------------------------------------- */
 /* main                                                                       */
 /* -------------------------------------------------------------------------- */
 
 /**
  * Results are written straight into `outputDir`:
- *   output/0001.png, 0002.png, ...   extracted pages
+ *   output/0001.png, 0002.png, ...   extracted pages (always kept)
+ *   <pdfName>.pdf                    the pages merged into one PDF (`makePdf`)
  *   duplicated/<name>.png            pages dropped as near-duplicates
  *   blank/<name>.png                 blank (solid colour) frames dropped
  *
@@ -591,13 +662,17 @@ function changeStats(a, b) {
  *   consecutiveImages?: number,
  *   similarityPercent?: number,
  *   skipBlank?: boolean,
+ *   makePdf?: boolean,
+ *   pdfName?: string,
+ *   pdfQuality?: 'jpeg' | 'png',
  *   signal?: AbortSignal,
  *   onProgress?: (ratio: number) => void,
  *   onLog?: (line: string) => void,
  * }} args
  *   `similarityPercent`: two images are duplicates when at most
  *   `100 − similarityPercent` % of their pixels differ. `manualCrop` is in
- *   ratios (0..1) of the image and skips auto detection.
+ *   ratios (0..1) of the image and skips auto detection. `makePdf` (default on)
+ *   merges the saved pages into `pdfName` (default `output.pdf`).
  */
 export async function processEbookExtract(args) {
   const inputPaths = normalizeInputs(args.inputPaths);
@@ -609,10 +684,13 @@ export async function processEbookExtract(args) {
   const blankDir = path.join(outputDir, 'blank');
   fs.mkdirSync(pagesDir, { recursive: true });
 
-  const windowSize = Math.max(1, Number(args.consecutiveImages) || 5);
+  const windowSize = Math.max(1, Number(args.consecutiveImages) || 3);
   const similarityPercent = clamp(Number(args.similarityPercent) || 99.9, 80, 100);
   const maxChanged = (100 - similarityPercent) / 100;
-  const skipBlank = args.skipBlank !== false;
+  const skipBlank = args.skipBlank === true;
+  const makePdf = args.makePdf !== false;
+  /** Share of the progress bar the image loop uses (the rest is for the PDF). */
+  const loopSpan = makePdf ? 0.8 : 0.92;
 
   const log = (line) => args.onLog?.(line);
   const aborted = () => {
@@ -657,7 +735,7 @@ export async function processEbookExtract(args) {
     aborted();
     const filePath = inputPaths[i];
     const file = path.basename(filePath);
-    args.onProgress?.(0.06 + (0.92 * i) / inputPaths.length);
+    args.onProgress?.(0.06 + (loopSpan * i) / inputPaths.length);
 
     try {
       const raw = fs.readFileSync(filePath);
@@ -715,6 +793,25 @@ export async function processEbookExtract(args) {
   const outputCount = outIndex - 1;
   if (outputCount === 0) throw new Error('저장된 결과가 없습니다. 영역/중복 설정을 확인해 주세요.');
 
+  /* ---- pdf ---- */
+  let pdfPath = '';
+  if (makePdf) {
+    try {
+      pdfPath = await buildPdf({
+        pagesDir,
+        pageCount: outputCount,
+        target: path.join(outputDir, normalizePdfName(args.pdfName)),
+        quality: args.pdfQuality === 'png' ? 'png' : 'jpeg',
+        signal: args.signal,
+        onProgress: (ratio) => args.onProgress?.(0.06 + loopSpan + (0.98 - 0.06 - loopSpan) * ratio),
+        log,
+      });
+    } catch (err) {
+      if (err instanceof Error && err.message === '작업이 취소되었습니다.') throw err;
+      log(`주의: PDF를 만들지 못했습니다 (PNG는 저장되어 있습니다): ${err instanceof Error ? err.message : String(err)}`);
+    }
+  }
+
   args.onProgress?.(1);
   log(
     `완료: 출력 ${outputCount}개` +
@@ -728,6 +825,7 @@ export async function processEbookExtract(args) {
     blankCount: blanks,
     outputDir,
     pagesDir,
+    pdfPath,
   };
 }
 

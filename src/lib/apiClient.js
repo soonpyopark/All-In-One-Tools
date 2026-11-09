@@ -3,8 +3,8 @@
  *
  *   const settings = await api('settings.get');
  *
- * The app is local-only (no login): requests go to the 127.0.0.1 server that
- * also serves this page.
+ * The app is local-only: calls go to the Electron main process over IPC
+ * (preload.cjs → `window.frame.api`). There is no server and no network port.
  */
 
 export class ApiRequestError extends Error {
@@ -27,33 +27,23 @@ export class ApiRequestError extends Error {
  * @returns {Promise<T>}
  */
 export async function api(name, body = {}) {
-  let response;
-  try {
-    response = await fetch(`/api/${encodeURIComponent(name)}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify(body ?? {}),
-    });
-  } catch {
-    throw new ApiRequestError('서버에 연결할 수 없습니다.', 0);
+  const bridge = typeof window !== 'undefined' ? window.frame : undefined;
+  if (!bridge?.api) {
+    throw new ApiRequestError('이 화면은 All-Tools 프로그램 안에서만 사용할 수 있습니다.', 0);
   }
 
-  if (!response.ok) {
-    /** @type {any} */
-    let payload = {};
-    try {
-      payload = await response.json();
-    } catch {
-      // non-JSON error body
-    }
-    throw new ApiRequestError(
-      payload?.error || `요청에 실패했습니다. (HTTP ${response.status})`,
-      response.status,
-      payload,
-    );
+  /** @type {any} */
+  let payload;
+  try {
+    payload = await bridge.api(name, body ?? {});
+  } catch {
+    throw new ApiRequestError('프로그램 내부 통신에 실패했습니다.', 0);
   }
-  const payload = await response.json();
-  return payload?.data;
+
+  if (!payload?.ok) {
+    throw new ApiRequestError(payload?.error || '요청에 실패했습니다.', payload?.status ?? 500, payload ?? {});
+  }
+  return payload.data;
 }
 
 /** Native bridge exposed by preload.cjs (file / folder pickers, reveal in folder). */

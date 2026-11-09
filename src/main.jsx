@@ -34,5 +34,5 @@ api('app.info')
     );
   })
   .catch((error) => {
-    renderStatus(error instanceof Error ? error.message : '서버에 연결할 수 없습니다.');
+    renderStatus(error instanceof Error ? error.message : '프로그램 내부 통신에 실패했습니다.');
   });

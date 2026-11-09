@@ -122,9 +122,12 @@ async function runJob(job) {
         inputPaths: job.inputPaths,
         outputDir: job.outputPath,
         manualCrop: options.manualCrop ?? null,
-        consecutiveImages: Number(options.consecutiveImages) || 5,
+        consecutiveImages: Number(options.consecutiveImages) || 3,
         similarityPercent: Number(options.similarityPercent) || 99.9,
-        skipBlank: options.skipBlank !== false,
+        skipBlank: options.skipBlank === true,
+        makePdf: options.makePdf !== false,
+        pdfName: typeof options.pdfName === 'string' ? options.pdfName : '',
+        pdfQuality: options.pdfQuality === 'png' ? 'png' : 'jpeg',
         signal: controller.signal,
         onProgress: (ratio) => {
           job.progress = Math.min(0.99, ratio);
@@ -142,6 +145,7 @@ async function runJob(job) {
         duplicateCount: extracted.duplicateCount,
         blankCount: extracted.blankCount,
         pagesDir: extracted.pagesDir,
+        pdfPath: extracted.pdfPath,
       };
       job.logs = logs.slice(-200);
     }

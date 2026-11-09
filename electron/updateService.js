@@ -43,6 +43,14 @@ export async function fetchLatestRelease(timeoutMs = 12_000) {
       },
       signal: controller.signal,
     });
+    if (response.status === 404) {
+      return {
+        ok: false,
+        configured: true,
+        ...base,
+        error: '게시된 릴리스가 아직 없습니다. GitHub 저장소의 Releases 에 새 버전을 올리면 확인할 수 있습니다.',
+      };
+    }
     if (!response.ok) {
       return { ok: false, configured: true, ...base, error: `GitHub 응답 오류 (HTTP ${response.status})` };
     }

@@ -78,6 +78,7 @@ export default function AdjustPage() {
 
   const inputPaths = useMemo(() => inputItems.map((item) => item.path), [inputItems]);
   const pitchStages = converter?.pitchStages?.length ? converter.pitchStages : PITCH_STAGES;
+  const pitchMax = pitchStages.length ? pitchStages[pitchStages.length - 1].stage : 6;
   const inputExts = converter?.inputExts ?? ['.mp4', '.ts', '.mkv', '.mov', '.avi', '.webm', '.m4v', '.mp3'];
 
   useEffect(() => {
@@ -123,6 +124,7 @@ export default function AdjustPage() {
   const pickFiles = async () => {
     if (!native?.pickOpenFiles) return;
     const result = await native.pickOpenFiles({
+      memoryKey: 'adjustInput',
       title: '영상·음원 선택 (여러 개 가능)',
       multi: true,
       filters: [
@@ -144,7 +146,7 @@ export default function AdjustPage() {
 
   const pickOutputDir = async () => {
     if (!native?.pickDirectory) return;
-    const result = await native.pickDirectory();
+    const result = await native.pickDirectory({ memoryKey: 'adjustOutput' });
     if (result?.canceled || !result?.path) return;
     setOutputDir(result.path);
     setOutputDirTouched(true);
@@ -322,15 +324,33 @@ export default function AdjustPage() {
             </Field>
 
             <Field label="피치" hint={pitchStageLabel(pitchStage)}>
-              <input
-                className="w-full accent-app-accent"
-                type="range"
-                min={0}
-                max={pitchStages.length ? pitchStages[pitchStages.length - 1].stage : 6}
-                step={1}
-                value={pitchStage}
-                onChange={(event) => setPitchStage(Number(event.target.value))}
-              />
+              <div className="flex items-center gap-2">
+                <button
+                  type="button"
+                  className={btnClass}
+                  disabled={pitchStage <= 0}
+                  onClick={() => setPitchStage((prev) => Math.max(0, prev - 1))}
+                >
+                  −
+                </button>
+                <input
+                  className="min-w-0 flex-1 accent-app-accent"
+                  type="range"
+                  min={0}
+                  max={pitchMax}
+                  step={1}
+                  value={pitchStage}
+                  onChange={(event) => setPitchStage(Number(event.target.value))}
+                />
+                <button
+                  type="button"
+                  className={btnClass}
+                  disabled={pitchStage >= pitchMax}
+                  onClick={() => setPitchStage((prev) => Math.min(pitchMax, prev + 1))}
+                >
+                  +
+                </button>
+              </div>
               <div className="mt-2 flex flex-wrap gap-1.5">
                 {pitchStages.map((stage) => (
                   <button

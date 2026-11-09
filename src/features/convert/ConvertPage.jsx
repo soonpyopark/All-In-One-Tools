@@ -235,6 +235,7 @@ export default function ConvertPage() {
         ]
       : [{ name: 'Video', extensions: ['mp4', 'mov', 'mkv', 'webm'] }];
     const result = await native.pickOpenFiles({
+      memoryKey: 'convertInput',
       title: isMergeProfile ? 'GIF 선택 (여러 개 가능)' : '동영상 선택 (여러 개 가능)',
       multi: true,
       filters,
@@ -264,7 +265,7 @@ export default function ConvertPage() {
 
   const pickOutputDir = async () => {
     if (!native?.pickDirectory) return;
-    const result = await native.pickDirectory();
+    const result = await native.pickDirectory({ memoryKey: 'convertOutput' });
     if (result?.canceled || !result?.path) return;
     setOutputDir(result.path);
     setOutputDirTouched(true);
@@ -400,7 +401,7 @@ export default function ConvertPage() {
     <div className="h-full overflow-auto p-6">
       <div className="mx-auto max-w-3xl space-y-5">
         <section>
-          <h1 className="m-0 text-xl font-semibold text-slate-900">Movie to GIF 변환</h1>
+          <h1 className="m-0 text-xl font-semibold text-slate-900">Movie2GIF 변환</h1>
           <p className="mt-1 text-sm text-slate-500">
             {isMergeProfile
               ? '여러 GIF를 순서대로 이어 붙여 하나의 GIF로 만듭니다.'

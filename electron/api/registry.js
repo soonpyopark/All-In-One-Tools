@@ -1,16 +1,15 @@
 /**
  * Tiny RPC registry. Every backend feature registers named handlers here;
- * the local HTTP server (electron/httpServer.js) exposes them as
- * `POST /api/<name>` and the renderer calls them with `api('<name>', body)`
- * (src/lib/apiClient.js).
+ * main.js exposes them over Electron IPC (`api:call`) and the renderer calls
+ * them with `api('<name>', body)` (src/lib/apiClient.js).
  *
- * The app is local-only: the server listens on 127.0.0.1 and there is no
- * login, so handlers receive no user / session context.
+ * The app is local-only: there is no server, no network port and no login,
+ * so handlers receive no user / session context.
  *
  * @typedef {(body: any) => unknown | Promise<unknown>} ApiHandler
  */
 
-/** HTTP-aware error: the message is shown to the user as-is. */
+/** Error whose message is shown to the user as-is (`status` is informational). */
 export class ApiError extends Error {
   /**
    * @param {string} message
@@ -21,19 +20,6 @@ export class ApiError extends Error {
     super(message);
     this.status = status;
     this.extra = extra;
-  }
-}
-
-/** Return this from a handler to send a file instead of JSON. */
-export class RawResponse {
-  /**
-   * @param {Buffer} buffer
-   * @param {{ fileName?: string, contentType?: string }} [options]
-   */
-  constructor(buffer, { fileName = '', contentType = 'application/octet-stream' } = {}) {
-    this.buffer = buffer;
-    this.fileName = fileName;
-    this.contentType = contentType;
   }
 }
 

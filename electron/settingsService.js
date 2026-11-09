@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import { DEFAULT_ACCENT_COLOR, normalizeAccentColor } from '../shared/theme.js';
 import { statePath } from './context.js';
 import { readJsonSync, withFileLock, writeJsonSync } from './jsonStore.js';
@@ -11,6 +12,7 @@ const SETTINGS_FILE = 'settings.json';
  *   startupUpdateCheck: boolean,
  *   ffmpegDir: string,
  *   exportDir: string,
+ *   folders: Record<string, string>,
  * }} AppSettings
  */
 
@@ -22,7 +24,24 @@ function defaultSettings() {
     startupUpdateCheck: true,
     ffmpegDir: '',
     exportDir: '',
+    folders: {},
   };
+}
+
+/** Keys of the remembered folders (see `rememberFolder`). */
+const FOLDER_KEY = /^[A-Za-z][A-Za-z0-9]{0,31}$/;
+const MAX_FOLDERS = 40;
+
+/** @param {any} raw @returns {Record<string, string>} */
+function normalizeFolders(raw) {
+  /** @type {Record<string, string>} */
+  const result = {};
+  if (!raw || typeof raw !== 'object') return result;
+  for (const [key, value] of Object.entries(raw)) {
+    if (Object.keys(result).length >= MAX_FOLDERS) break;
+    if (FOLDER_KEY.test(key) && typeof value === 'string') result[key] = value.trim();
+  }
+  return result;
 }
 
 /**
@@ -42,15 +61,13 @@ function normalizeSettings(raw) {
     startupUpdateCheck: src.startupUpdateCheck !== false,
     ffmpegDir: typeof src.ffmpegDir === 'string' ? src.ffmpegDir.trim() : base.ffmpegDir,
     exportDir: typeof src.exportDir === 'string' ? src.exportDir.trim() : base.exportDir,
+    folders: normalizeFolders(src.folders),
   };
 }
 
-/** @type {AppSettings | null} */
-let cache = null;
-
+/** Always read from disk: several program instances may share one settings file. */
 function load() {
-  if (!cache) cache = normalizeSettings(readJsonSync(statePath(SETTINGS_FILE), {}));
-  return cache;
+  return normalizeSettings(readJsonSync(statePath(SETTINGS_FILE), {}));
 }
 
 /** @returns {AppSettings} */
@@ -75,7 +92,42 @@ export function updateSettings(patch) {
     const current = load();
     const next = normalizeSettings({ ...current, ...patch });
     writeJsonSync(statePath(SETTINGS_FILE), next);
-    cache = next;
     return structuredClone(next);
+  });
+}
+
+/**
+ * Folder last used for `key` (e.g. 'convertInput', 'cleanupOutput'); '' when
+ * nothing was remembered yet or the folder no longer exists.
+ *
+ * @param {string} key
+ * @returns {string}
+ */
+export function getRememberedFolder(key) {
+  const dir = load().folders[String(key ?? '')] ?? '';
+  try {
+    return dir && fs.statSync(dir).isDirectory() ? dir : '';
+  } catch {
+    return '';
+  }
+}
+
+/**
+ * Remembers the folder for `key`; an empty `dir` forgets it.
+ *
+ * @param {string} key
+ * @param {string} dir
+ */
+export async function rememberFolder(key, dir) {
+  const name = String(key ?? '');
+  if (!FOLDER_KEY.test(name)) return;
+  const value = String(dir ?? '').trim();
+  await withFileLock(statePath(SETTINGS_FILE), () => {
+    const current = load();
+    if ((current.folders[name] ?? '') === value) return;
+    writeJsonSync(
+      statePath(SETTINGS_FILE),
+      normalizeSettings({ ...current, folders: { ...current.folders, [name]: value } }),
+    );
   });
 }

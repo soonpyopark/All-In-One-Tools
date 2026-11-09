@@ -47,9 +47,12 @@ export default function CleanupPage() {
   const [outputDir, setOutputDir] = useState('');
   const [dedupMode, setDedupMode] = useState(/** @type {'consecutive' | 'global'} */ ('consecutive'));
   const [similarityPercent, setSimilarityPercent] = useState(99.99);
-  const [consecutiveImages, setConsecutiveImages] = useState(5);
+  const [consecutiveImages, setConsecutiveImages] = useState(3);
   const [ebookSimilarity, setEbookSimilarity] = useState(99.9);
-  const [skipBlank, setSkipBlank] = useState(true);
+  const [skipBlank, setSkipBlank] = useState(false);
+  const [makePdf, setMakePdf] = useState(true);
+  const [pdfName, setPdfName] = useState('');
+  const [pdfQuality, setPdfQuality] = useState('jpeg');
   /** @type {['auto' | 'manual', Function]} */
   const [cropMode, setCropMode] = useState(/** @type {'auto' | 'manual'} */ ('auto'));
   /** Manual region as ratios (0..1) of the image edges. */
@@ -59,6 +62,30 @@ export default function CleanupPage() {
   const [job, setJob] = useState(/** @type {any} */ (null));
   const [busy, setBusy] = useState(false);
   const [stopping, setStopping] = useState(false);
+
+  // Output folder: restored from the last run, and saved again whenever it changes.
+  const [outputDirLoaded, setOutputDirLoaded] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    api('folders.get', { key: 'cleanupOutput' })
+      .then((res) => {
+        if (alive && res?.path) setOutputDir((current) => current || res.path);
+      })
+      .catch(() => undefined)
+      .finally(() => {
+        if (alive) setOutputDirLoaded(true);
+      });
+    return () => {
+      alive = false;
+    };
+  }, []);
+  useEffect(() => {
+    if (!outputDirLoaded) return undefined;
+    const timer = window.setTimeout(() => {
+      void api('folders.set', { key: 'cleanupOutput', path: outputDir.trim() }).catch(() => undefined);
+    }, 500);
+    return () => window.clearTimeout(timer);
+  }, [outputDir, outputDirLoaded]);
 
   const selected = useMemo(
     () => tools.find((t) => t.id === toolId) ?? tools[0] ?? null,
@@ -113,6 +140,7 @@ export default function CleanupPage() {
   const pickFiles = async () => {
     if (!native?.pickOpenFiles || !selected) return;
     const result = await native.pickOpenFiles({
+      memoryKey: isEbook ? 'ebookInput' : 'pdfInput',
       title: isEbook ? '이미지 선택 (여러 개 가능)' : 'PDF 선택 (여러 개 가능)',
       multi: true,
       filters: [
@@ -128,7 +156,7 @@ export default function CleanupPage() {
 
   const addFolder = async () => {
     if (!native?.pickDirectory || !selected) return;
-    const picked = await native.pickDirectory();
+    const picked = await native.pickDirectory({ memoryKey: isEbook ? 'ebookInput' : 'pdfInput' });
     if (picked?.canceled || !picked?.path) return;
     try {
       const { files, dir } = await api('cleanup.listFolder', {
@@ -172,7 +200,7 @@ export default function CleanupPage() {
 
   const pickOutputDir = async () => {
     if (!native?.pickDirectory) return;
-    const result = await native.pickDirectory();
+    const result = await native.pickDirectory({ memoryKey: 'cleanupOutput' });
     if (result?.canceled || !result?.path) return;
     setOutputDir(result.path);
   };
@@ -248,6 +276,9 @@ export default function CleanupPage() {
             consecutiveImages,
             similarityPercent: ebookSimilarity,
             skipBlank,
+            makePdf,
+            pdfName: pdfName.trim(),
+            pdfQuality,
             manualCrop:
               cropMode === 'manual' && manualBox
                 ? {
@@ -411,7 +442,7 @@ export default function CleanupPage() {
               label="저장 폴더"
               hint={
                 isEbook
-                  ? '비워 두면 첫 이미지가 있는 폴더에 ebook_날짜 폴더를 만들고 output/(결과), duplicated/(중복)로 저장합니다.'
+                  ? '비워 두면 첫 이미지가 있는 폴더에 ebook_날짜 폴더를 만들고 output/(PNG 결과), duplicated/(중복)로 저장합니다. PDF 합치기를 켜면 PDF도 이 폴더에 만듭니다.'
                   : '비워 두면 각 PDF가 있는 폴더에 저장합니다.'
               }
             >
@@ -471,17 +502,22 @@ export default function CleanupPage() {
                       <RegionPreview
                         src={preview.previewDataUrl}
                         box={cropMode === 'manual' ? manualBox : detectedEdges}
-                        editable={cropMode === 'manual'}
-                        onChange={setManualBox}
+                        editable
+                        allowDraw={cropMode === 'manual'}
+                        onChange={(next) => {
+                          // Touching the outline in auto mode switches to manual, starting from the detected region.
+                          setCropMode('manual');
+                          setManualBox(next);
+                        }}
                       />
                       <p className="m-0 text-center text-xs text-slate-500">
                         {cropMode === 'manual'
-                          ? '이미지 위에서 드래그해 영역을 지정하세요. (첫 번째 이미지 기준, 모든 이미지에 같은 비율로 적용)'
+                          ? '테두리·모서리를 끌어 크기를, 안쪽을 끌어 위치를 조절하고, 바깥을 끌면 새로 그립니다. (첫 번째 이미지 기준, 모든 이미지에 같은 비율로 적용)'
                           : preview.method === 'fallback'
                             ? '자동 감지에 실패해 기본 비율 영역을 보여 줍니다. 수동 지정을 권장합니다.'
                             : `${preview.sampled}장 중 ${preview.detectedCount}장에서 감지, ${preview.agreed}장 일치${
                                 preview.agreed < Math.ceil(preview.detectedCount / 2) ? ' — 일치도가 낮습니다. 수동 지정을 권장합니다.' : ''
-                              }`}
+                              } · 테두리를 끌면 수동으로 조절합니다.`}
                       </p>
                     </div>
                   ) : (
@@ -546,7 +582,7 @@ export default function CleanupPage() {
               </>
             ) : (
               <>
-                <Field label="연속 비교 개수" hint="최근 N개 crop 결과와만 비교합니다.">
+                <Field label="연속 비교 개수" hint="기본 3 — 최근 N개 crop 결과와만 비교합니다.">
                   <input
                     className={inputClass}
                     type="number"
@@ -576,6 +612,35 @@ export default function CleanupPage() {
                   checked={skipBlank}
                   onChange={setSkipBlank}
                 />
+                <ToggleRow
+                  label="결과를 PDF로 합치기"
+                  hint="추출된 페이지를 순서대로 한 PDF 파일로 만듭니다. PNG 파일(output/ 폴더)은 그대로 남습니다."
+                  checked={makePdf}
+                  onChange={setMakePdf}
+                />
+                {makePdf ? (
+                  <div className="grid gap-3 sm:grid-cols-2">
+                    <Field label="PDF 파일 이름" hint="비워 두면 output.pdf">
+                      <input
+                        className={inputClass}
+                        type="text"
+                        placeholder="output.pdf"
+                        value={pdfName}
+                        onChange={(event) => setPdfName(event.target.value)}
+                      />
+                    </Field>
+                    <Field label="PDF 화질" hint="JPEG 는 용량이 훨씬 작고, PNG 는 무손실입니다.">
+                      <select
+                        className={inputClass}
+                        value={pdfQuality}
+                        onChange={(event) => setPdfQuality(event.target.value)}
+                      >
+                        <option value="jpeg">JPEG 90% (용량 작음)</option>
+                        <option value="png">PNG 원본 (무손실)</option>
+                      </select>
+                    </Field>
+                  </div>
+                ) : null}
               </>
             )}
 
@@ -649,14 +714,30 @@ export default function CleanupPage() {
                     {' · '}
                     <code className={codeClass}>{job.outputPath}</code>
                   </p>
+                  {job.result.pdfPath ? (
+                    <p className="m-0 text-xs text-slate-500">
+                      PDF: <code className={codeClass}>{fileName(job.result.pdfPath)}</code>
+                    </p>
+                  ) : null}
                   {native?.showItemInFolder ? (
-                    <button
-                      type="button"
-                      className={btnClass}
-                      onClick={() => void native.showItemInFolder(job.result.pagesDir || job.outputPath)}
-                    >
-                      폴더 보기
-                    </button>
+                    <div className="flex flex-wrap gap-2">
+                      {job.result.pdfPath ? (
+                        <button
+                          type="button"
+                          className={btnClass}
+                          onClick={() => void native.showItemInFolder(job.result.pdfPath)}
+                        >
+                          PDF 보기
+                        </button>
+                      ) : null}
+                      <button
+                        type="button"
+                        className={btnClass}
+                        onClick={() => void native.showItemInFolder(job.result.pagesDir || job.outputPath)}
+                      >
+                        폴더 보기
+                      </button>
+                    </div>
                   ) : null}
                 </div>
               ) : null}

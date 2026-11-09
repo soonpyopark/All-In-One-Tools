@@ -2,32 +2,32 @@
 
 ![All-tools](assets-src/logo-horizontal.png)
 
-로컬 전용 Electron 도구 모음(Movie to GIF 변환, 피치&볼륨 조절, 이북(eBook) 정리(영역 추출·PDF 중복 페이지 제거). 로그인·회원·웹 접속 없이 이 PC에서만 동작하며, **기능만 추가**하면 된다.
+로컬 전용 Electron 도구 모음(Movie2GIF 변환, 피치&볼륨 조절, 이북(eBook) 정리(영역 추출·PDF 중복 페이지 제거). 로그인·회원·웹 접속 없이 이 PC에서만 동작하며, **기능만 추가**하면 된다.
 
 ## 명령
 
 | 명령 | 설명 |
 | --- | --- |
 | `npm install` | 최초 1회 |
-| `npm run dev` | 실행 (Electron 창 + 127.0.0.1 로컬 서버, HMR) |
+| `npm run dev` | 실행 (화면 소스를 감시 빌드하고 저장 시 창을 자동 새로고침) |
 | `npm run dev:restart` | 중지 후 재기동 |
-| `npm run dev:stop` | 포트·Electron 프로세스를 모두 정리하고 종료 |
+| `npm run dev:stop` | 이 프로젝트의 Electron 프로세스를 모두 종료 |
 | `npm run build:release` | Windows MSI + portable zip → `release/` |
 | `npm run build:release:mac` | macOS dmg → `release/` (macOS 에서만 실행 가능) |
 
 산출물 이름: `AllTools_<YYMMDD_HHMMSS>_<arch>.msi`, `AllTools_portable_<stamp>_<arch>.zip`, `AllTools_<stamp>_<arch>.dmg`.
 
-내부 서버는 항상 `127.0.0.1` 에만 열리며 기본 포트는 3001 (`.env` 의 `APP_PORT` 로 변경). 다른 PC·브라우저에서는 접속할 수 없다.
+서버·네트워크 포트가 없다. 화면과 기능 처리는 Electron 내부 통신(IPC)으로만 연결되므로 다른 PC·브라우저에서는 접근할 수 없다. 트레이 아이콘도 없고, 창을 닫으면 종료되며, 실행 중에 다시 실행해 여러 개를 동시에 띄울 수 있다.
 
 ## 구조
 
-- `main.js`, `preload.cjs` — Electron 진입점 (파일/폴더 선택 등 네이티브 기능은 preload 로 노출)
-- `electron/httpServer.js` — UI + `POST /api/<name>` RPC 를 한 포트로 서비스 (로컬 호스트·Origin 만 허용)
+- `main.js`, `preload.cjs` — Electron 진입점 (API 호출과 파일/폴더 선택 등 네이티브 기능은 preload 로 노출, 메인에서 요청 출처 검증)
+- `electron/devRenderer.js` — 개발 시 화면을 `.dev-dist/` 로 감시 빌드 (운영은 `dist/` 를 파일로 로드)
 - `electron/api/coreApi.js` — 기본 API (앱 정보, 설정, 업데이트 확인)
 - `electron/modules/*` — 기능별 API (변환, 이북)
 - `electron/settingsService.js` — 설정 저장
 - `shared/*` — 메인/화면 공용 코드 (`constants.js` 에 앱 이름·버전)
-- `src/` — React 화면. `src/lib/apiClient.js` 가 API 클라이언트 (※ `src/api/` 폴더는 `/api/` 라우트와 충돌하므로 만들지 말 것)
+- `src/` — React 화면. `src/lib/apiClient.js` 가 API 클라이언트 (`window.frame.api` → IPC `api:call` → `dispatchApi`)
 
 ## 기능 추가 방법
 

@@ -18,9 +18,9 @@ function readIconRev() {
 }
 
 /**
- * Dev: the Electron main process embeds Vite in middleware mode on the app's
- * own HTTP port (electron/httpServer.js) — there is no separate Vite port.
- * `npm run build` emits the renderer to dist/.
+ * No dev server and no port: `npm run build` emits the renderer to dist/, and
+ * in dev the Electron main process runs this config in watch mode
+ * (electron/devRenderer.js) into .dev-dist/.
  */
 export default defineConfig({
   root: path.resolve(__dirname, 'src'),

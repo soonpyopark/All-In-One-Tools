@@ -5,7 +5,7 @@
     -d AppName=… -d ExeName=… -d ProductVersion=x.y.z.n -d ProductCode={guid}
     -d StageDir=<absolute path of the unpacked app> -d InstallerDir=<this folder>
 
-  Mutable state (settings, members, backups) lives in %APPDATA% — never inside
+  Mutable state (settings) lives in %APPDATA% — never inside
   the install folder — so upgrades and uninstalls cannot wipe it.
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
