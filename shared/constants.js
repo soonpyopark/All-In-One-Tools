@@ -21,7 +21,7 @@ export const APP_BUILD_STAMP = '261029_165448';
  * GitHub repository (`owner/repo`) whose latest release is used by the
  * 업데이트 확인 button. Leave empty until the project has a release page.
  */
-export const UPDATE_REPO = 'soonpyopark/All-tools';
+export const UPDATE_REPO = 'soonpyopark/All-In-One-Tools';
 
 /** Content hash of build/icon-source.png (scripts/prepare-icons.mjs). */
 export { APP_ICON_REV } from './iconRev.js';
