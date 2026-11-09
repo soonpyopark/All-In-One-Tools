@@ -14,6 +14,9 @@
     "build": "npm run prepare:icons && vite build",
     "build:release": "node scripts/build-release.mjs",
     "build:release:mac": "node scripts/build-release-mac.mjs",
+    "update:all": "node scripts/update-all.mjs",
+    "build:update_all": "update_all.bat _inner && npm run build:release",
+    "build:update_all:mac": "node scripts/update-all.mjs && npm run build:release:mac",
     "start": "npm run build && electron .",
     "stamp": "node scripts/sync-build-stamp.mjs"
   },
@@ -25,15 +28,15 @@
   ],
   "license": "UNLICENSED",
   "devDependencies": {
-    "@tailwindcss/postcss": "^4.3.3",
-    "@vitejs/plugin-react": "^6.1.2",
+    "@tailwindcss/postcss": "^4.3.5",
+    "@vitejs/plugin-react": "^6.3.0",
     "electron": "^44.10.0",
-    "electron-builder": "^26.15.3",
+    "electron-builder": "^26.18.0",
     "png-to-ico": "^3.0.2",
-    "postcss": "^8.5.31",
+    "postcss": "^8.5.32",
     "rcedit": "^5.0.2",
-    "tailwindcss": "^4.3.3",
-    "vite": "^8.3.4"
+    "tailwindcss": "^4.3.5",
+    "vite": "^8.3.7"
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.1.0",

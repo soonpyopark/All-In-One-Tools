@@ -14,6 +14,11 @@
 | `npm run dev:stop` | 이 프로젝트의 Electron 프로세스를 모두 종료 |
 | `npm run build:release` | Windows MSI + portable zip → `release/` |
 | `npm run build:release:mac` | macOS dmg → `release/` (macOS 에서만 실행 가능) |
+| `npm run update:all` | npm 의존성(`@latest`, 메이저 포함) + Electron 최신화 (`update_all.bat` 으로도 실행) |
+| `npm run build:update_all` | 최신화 + `build:release` (Windows) |
+| `npm run build:update_all:mac` | 최신화 + `build:release:mac` (macOS) |
+
+`update:all` 옵션: `--skip-git`(git pull 생략) `--skip-npm` `--skip-majors`(Electron·electron-builder 만 최신화) `--build`. 로그는 `update_all.bat` 실행 시 `.cache/logs/update-all.log` 에 남는다.
 
 산출물 이름: `AllTools_<YYMMDD_HHMMSS>_<arch>.msi`, `AllTools_portable_<stamp>_<arch>.zip`, `AllTools_<stamp>_<arch>.dmg`.
 
