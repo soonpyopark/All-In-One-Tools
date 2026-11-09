@@ -1,0 +1,99 @@
+{
+  "name": "all-tools",
+  "productName": "AllTools",
+  "version": "1.0.0",
+  "description": "All-Tools: Electron app with video-to-GIF conversion and extensible tools.",
+  "main": "main.js",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "dev": "npm run prepare:icons && electron .",
+    "dev:stop": "node scripts/dev-process.mjs stop",
+    "dev:restart": "node scripts/dev-process.mjs restart",
+    "prepare:icons": "node scripts/prepare-icons.mjs",
+    "build": "npm run prepare:icons && vite build",
+    "build:release": "node scripts/build-release.mjs",
+    "build:release:mac": "node scripts/build-release-mac.mjs",
+    "start": "npm run build && electron .",
+    "stamp": "node scripts/sync-build-stamp.mjs"
+  },
+  "keywords": [
+    "electron",
+    "react",
+    "frame",
+    "boilerplate"
+  ],
+  "license": "UNLICENSED",
+  "devDependencies": {
+    "@tailwindcss/postcss": "^4.3.3",
+    "@vitejs/plugin-react": "^6.1.2",
+    "electron": "^44.10.0",
+    "electron-builder": "^26.15.3",
+    "png-to-ico": "^3.0.2",
+    "postcss": "^8.5.31",
+    "rcedit": "^5.0.2",
+    "tailwindcss": "^4.3.3",
+    "vite": "^8.3.4"
+  },
+  "dependencies": {
+    "@napi-rs/canvas": "^1.1.0",
+    "pdf-lib": "^1.17.1",
+    "pdfjs-dist": "^6.5.438",
+    "react": "^19.3.1",
+    "react-dom": "^19.3.1",
+    "sharp": "^0.35.5"
+  },
+  "build": {
+    "appId": "com.alltools.app",
+    "productName": "AllTools",
+    "icon": "build/icon.png",
+    "directories": {
+      "output": ".dist-build"
+    },
+    "files": [
+      "main.js",
+      "preload.cjs",
+      "electron/**/*",
+      "shared/**/*",
+      "dist/**/*",
+      "package.json"
+    ],
+    "asar": true,
+    "asarUnpack": [
+      "node_modules/sharp/**/*",
+      "node_modules/@img/**/*",
+      "node_modules/@napi-rs/**/*"
+    ],
+    "extraResources": [
+      {
+        "from": "build/icon.png",
+        "to": "icon.png"
+      },
+      {
+        "from": "build/icon.ico",
+        "to": "icon.ico"
+      }
+    ],
+    "win": {
+      "icon": "build/icon.ico",
+      "target": [
+        {
+          "target": "dir",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
+    },
+    "mac": {
+      "icon": "build/icon.png",
+      "identity": null,
+      "category": "public.app-category.productivity",
+      "target": [
+        {
+          "target": "dir"
+        }
+      ]
+    }
+  }
+}

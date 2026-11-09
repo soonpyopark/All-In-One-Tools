@@ -1,0 +1,44 @@
+/**
+ * App-wide constants shared by the Electron main process, the build scripts
+ * and the renderer. Rebrand a new app from this file first.
+ */
+
+/** Display name (UI, window title). */
+export const APP_NAME = 'All-Tools';
+
+/** File-system friendly name used in installer / archive file names. */
+export const APP_FILE_NAME = 'AllTools';
+
+export const APP_VERSION = '1.0.0';
+
+/**
+ * Package build id (YYMMDD_HHMMSS). Rewritten by `npm run build:release*`
+ * (scripts/sync-build-stamp.mjs); matches the suffix of the produced files.
+ */
+export const APP_BUILD_STAMP = '261029_165448';
+
+/** Default port of the local (127.0.0.1) server the Electron window talks to. */
+export const DEFAULT_PORT = 3001;
+
+/**
+ * GitHub repository (`owner/repo`) whose latest release is used by the
+ * 업데이트 확인 button. Leave empty until the project has a release page.
+ */
+export const UPDATE_REPO = '';
+
+/** Content hash of build/icon-source.png (scripts/prepare-icons.mjs). */
+export { APP_ICON_REV } from './iconRev.js';
+
+/** Web UI icon (served from public/). Query busts Chrome's sticky favicon cache. */
+export const APP_ICON_URL = '/icon.png';
+
+/**
+ * @param {string} [stamp]
+ * @returns {string} `YYYY-MM-DD HH:MM:SS`
+ */
+export function formatAppBuildStamp(stamp = APP_BUILD_STAMP) {
+  if (/^0+_0+$/.test(String(stamp ?? '').trim())) return '개발 빌드';
+  const match = /^(\d{2})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})$/.exec(String(stamp ?? '').trim());
+  if (!match) return String(stamp ?? '').trim();
+  return `${2000 + Number(match[1])}-${match[2]}-${match[3]} ${match[4]}:${match[5]}:${match[6]}`;
+}

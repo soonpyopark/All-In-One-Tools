@@ -1,0 +1,67 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1024" height="1024" viewBox="0 0 1024 1024">
+  <defs>
+    <linearGradient id="plate" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#252c40"/>
+      <stop offset="1" stop-color="#10141f"/>
+    </linearGradient>
+    <linearGradient id="blue" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#5ca6ff"/>
+      <stop offset="1" stop-color="#2f6be5"/>
+    </linearGradient>
+    <linearGradient id="purple" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#b79cff"/>
+      <stop offset="1" stop-color="#7d58df"/>
+    </linearGradient>
+    <linearGradient id="green" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#40e0a8"/>
+      <stop offset="1" stop-color="#11a46b"/>
+    </linearGradient>
+    <linearGradient id="orange" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffae56"/>
+      <stop offset="1" stop-color="#f06a22"/>
+    </linearGradient>
+    <mask id="gear" maskUnits="userSpaceOnUse" x="-120" y="-120" width="240" height="240">
+      <g fill="#fff">
+        <circle r="62"/>
+        <rect x="-16" y="-82" width="32" height="164" rx="6"/>
+        <rect x="-16" y="-82" width="32" height="164" rx="6" transform="rotate(45)"/>
+        <rect x="-16" y="-82" width="32" height="164" rx="6" transform="rotate(90)"/>
+        <rect x="-16" y="-82" width="32" height="164" rx="6" transform="rotate(135)"/>
+      </g>
+      <circle r="31" fill="#000"/>
+    </mask>
+  </defs>
+
+  <rect x="2" y="2" width="1020" height="1020" rx="228" fill="url(#plate)" stroke="#ffffff" stroke-opacity=".08" stroke-width="4"/>
+
+  <!-- blue: play -->
+  <g transform="translate(150 150)">
+    <rect width="341" height="341" rx="88" fill="url(#blue)"/>
+    <path d="M124 92 L250 170 L124 249 Z" fill="#fff" stroke="#fff" stroke-width="22" stroke-linejoin="round"/>
+  </g>
+
+  <!-- purple: bars -->
+  <g transform="translate(533 150)">
+    <rect width="341" height="341" rx="88" fill="url(#purple)"/>
+    <g fill="#fff">
+      <rect x="99" y="150" width="42" height="85" rx="21"/>
+      <rect x="149" y="95" width="44" height="140" rx="22"/>
+      <rect x="206" y="132" width="42" height="103" rx="21"/>
+    </g>
+  </g>
+
+  <!-- green: pause -->
+  <g transform="translate(150 533)">
+    <rect width="341" height="341" rx="88" fill="url(#green)"/>
+    <rect x="101" y="113" width="64" height="115" rx="14" fill="#fff"/>
+    <rect x="180" y="113" width="64" height="115" rx="14" fill="#fff" fill-opacity=".88"/>
+  </g>
+
+  <!-- orange: gear -->
+  <g transform="translate(533 533)">
+    <rect width="341" height="341" rx="88" fill="url(#orange)"/>
+    <g transform="translate(170.5 170.5)">
+      <rect x="-120" y="-120" width="240" height="240" fill="#fff" mask="url(#gear)"/>
+    </g>
+  </g>
+</svg>
