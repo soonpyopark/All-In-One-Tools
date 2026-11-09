@@ -4,7 +4,7 @@
  */
 
 /** Display name (UI, window title). */
-export const APP_NAME = 'All-Tools';
+export const APP_NAME = 'All In One Tools';
 
 /** File-system friendly name used in installer / archive file names. */
 export const APP_FILE_NAME = 'AllTools';

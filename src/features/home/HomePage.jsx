@@ -22,7 +22,7 @@ export default function HomePage({ features = [], onNavigate }) {
           <div>
             <h1 className="m-0 text-xl font-semibold text-slate-900">{appInfo.name}</h1>
             <p className="mt-1 text-sm text-slate-500">
-              Movie2GIF 변환, 피치&볼륨 조절, 이북(eBook) 정리(영역 추출·PDF 중복 페이지 제거) 기능을 사용할 수 있습니다.
+              Movie2GIF 변환, 피치&볼륨 조절, 이북(eBook) 정리(영역 추출·PDF 중복 페이지 제거), 서브넷 계산기 기능을 사용할 수 있습니다.
             </p>
           </div>
         </section>

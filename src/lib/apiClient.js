@@ -29,7 +29,7 @@ export class ApiRequestError extends Error {
 export async function api(name, body = {}) {
   const bridge = typeof window !== 'undefined' ? window.frame : undefined;
   if (!bridge?.api) {
-    throw new ApiRequestError('이 화면은 All-Tools 프로그램 안에서만 사용할 수 있습니다.', 0);
+    throw new ApiRequestError('이 화면은 All In One Tools 프로그램 안에서만 사용할 수 있습니다.', 0);
   }
 
   /** @type {any} */

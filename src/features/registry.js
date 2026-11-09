@@ -18,10 +18,19 @@ import AdjustPage from './adjust/AdjustPage.jsx';
 import CleanupPage from './cleanup/CleanupPage.jsx';
 import ConvertPage from './convert/ConvertPage.jsx';
 import HomePage from './home/HomePage.jsx';
+import SubnetPage from './subnet/SubnetPage.jsx';
 
 /** @type {FeatureDefinition[]} */
 export const FEATURES = [
   { id: 'home', label: '홈', icon: '🏠', component: HomePage },
+  {
+    id: 'cleanup',
+    label: '이북(eBook) 정리',
+    icon: '📚',
+    description: '스크린샷에서 이북 영역을 추출해 PDF 로 만들고, PDF 의 중복 페이지를 제거합니다.',
+    color: ['#40e0a8', '#11a46b'],
+    component: CleanupPage,
+  },
   {
     id: 'convert',
     label: 'Movie2GIF 변환',
@@ -39,11 +48,11 @@ export const FEATURES = [
     component: AdjustPage,
   },
   {
-    id: 'cleanup',
-    label: '이북(eBook) 정리',
-    icon: '📚',
-    description: '스크린샷에서 이북 영역을 추출해 PDF 로 만들고, PDF 의 중복 페이지를 제거합니다.',
-    color: ['#40e0a8', '#11a46b'],
-    component: CleanupPage,
+    id: 'subnet',
+    label: '서브넷 계산기',
+    icon: '🧮',
+    description: 'IPv4 주소와 서브넷마스크로 네트워크·브로드캐스트 주소와 사용 가능한 호스트 범위를 계산합니다.',
+    color: ['#ffb454', '#e8791a'],
+    component: SubnetPage,
   },
 ];

@@ -1,7 +1,7 @@
 import { spawn } from 'node:child_process';
 
 /**
- * Windows: removes the small icon in front of the window title ("[icon] All-Tools")
+ * Windows: removes the small icon in front of the window title ("[icon] All In One Tools")
  * while keeping the taskbar / Alt+Tab icon.
  *
  * Electron's `icon` option sets the title-bar icon and the taskbar icon together, so

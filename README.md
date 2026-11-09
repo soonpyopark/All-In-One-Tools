@@ -1,8 +1,8 @@
-# All-Tools
+# All In One Tools
 
-![All-tools](assets-src/logo-horizontal.png)
+![All In One Tools](assets-src/logo-horizontal.png)
 
-로컬 전용 Electron 도구 모음(Movie2GIF 변환, 피치&볼륨 조절, 이북(eBook) 정리(영역 추출·PDF 중복 페이지 제거). 로그인·회원·웹 접속 없이 이 PC에서만 동작하며, **기능만 추가**하면 된다.
+로컬 전용 Electron 도구 모음(Movie2GIF 변환, 피치&볼륨 조절, 이북(eBook) 정리(영역 추출·PDF 중복 페이지 제거), 서브넷 계산기). 로그인·회원·웹 접속 없이 이 PC에서만 동작하며, **기능만 추가**하면 된다.
 
 ## 명령
 

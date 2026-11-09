@@ -9,7 +9,7 @@ import TopBar from './TopBar.jsx';
 let startupChecked = false;
 
 const floatingButtonClass =
-  'flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 bg-white/95 text-slate-600 shadow-lg backdrop-blur transition hover:-translate-y-0.5 hover:border-app-accent hover:text-app-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-app-accent/40';
+  'flex h-10 w-10 items-center justify-center rounded-full border border-slate-200 text-slate-600 shadow-lg backdrop-blur transition hover:-translate-y-0.5 hover:border-app-accent hover:text-app-accent focus:outline-none focus-visible:ring-2 focus-visible:ring-app-accent/40';
 
 /**
  * Each feature page is one scroll container (`h-full overflow-auto`) and the first
@@ -97,38 +97,37 @@ export default function AppShell() {
           {ActiveFeature ? <ActiveFeature key={`${active.id}:${resetCount}`} features={features} onNavigate={goTo} /> : null}
 
           <div className="pointer-events-none absolute bottom-5 right-7 z-20 flex flex-col gap-2">
-            {active?.id !== features[0]?.id ? (
-              <>
-                <button
-                  type="button"
-                  className={`${floatingButtonClass} pointer-events-auto`}
-                  title="홈으로"
-                  aria-label="홈으로"
-                  onClick={() => goTo(features[0].id)}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M3 11.5 12 4l9 7.5" />
-                    <path d="M5.5 10v9.5h13V10" />
-                    <path d="M10 19.5v-5h4v5" />
-                  </svg>
-                </button>
-                <button
-                  type="button"
-                  className={`${floatingButtonClass} pointer-events-auto`}
-                  title="화면 초기화"
-                  aria-label="화면 초기화"
-                  onClick={() => void resetPage()}
-                >
-                  <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-                    <path d="M20 12a8 8 0 1 1-2.6-5.9" />
-                    <path d="M20 4v5h-5" />
-                  </svg>
-                </button>
-              </>
-            ) : null}
             <button
               type="button"
-              className={`${floatingButtonClass} pointer-events-auto`}
+              className={`${floatingButtonClass} pointer-events-auto bg-green-100 hover:bg-green-200`}
+              title="홈으로"
+              aria-label="홈으로"
+              onClick={() => goTo(features[0].id)}
+            >
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3 11.5 12 4l9 7.5" />
+                <path d="M5.5 10v9.5h13V10" />
+                <path d="M10 19.5v-5h4v5" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className={`${floatingButtonClass} pointer-events-auto bg-yellow-100 hover:bg-yellow-200`}
+              title="화면 초기화"
+              aria-label="화면 초기화"
+              onClick={() => void resetPage()}
+            >
+              {/* 화살표 2개가 위·아래 반원으로 맞물려 원을 이루는 새로고침 아이콘 */}
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M3.5 9a9 9 0 0 1 14.85-3.36L22 9.5" />
+                <path d="M22 3.5v6h-6" />
+                <path d="M20.5 15a9 9 0 0 1-14.85 3.36L2 14.5" />
+                <path d="M2 20.5v-6h6" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className={`${floatingButtonClass} pointer-events-auto bg-sky-100 hover:bg-sky-200`}
               title="맨 위로"
               aria-label="맨 위로"
               onClick={scrollToTop}
