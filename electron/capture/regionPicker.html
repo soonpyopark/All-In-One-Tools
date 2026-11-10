@@ -1,0 +1,93 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      http-equiv="Content-Security-Policy"
+      content="default-src 'none'; img-src data:; style-src 'unsafe-inline'; script-src 'unsafe-inline'"
+    />
+    <title>영역 선택</title>
+    <style>
+      html, body { margin: 0; width: 100%; height: 100%; overflow: hidden; background: #000; cursor: crosshair; user-select: none; }
+      #shot { position: fixed; inset: 0; width: 100%; height: 100%; }
+      #dim { position: fixed; inset: 0; background: rgba(0, 0, 0, 0.45); }
+      #box { position: fixed; display: none; border: 2px solid #38bdf8; box-sizing: border-box; background-size: 100vw 100vh; }
+      #hint {
+        position: fixed; top: 16px; left: 50%; transform: translateX(-50%);
+        background: rgba(15, 23, 42, 0.9); color: #fff; padding: 8px 16px; border-radius: 8px;
+        font: 14px 'Segoe UI', 'Malgun Gothic', sans-serif; pointer-events: none;
+      }
+      #size {
+        position: fixed; display: none; background: #0f172a; color: #fff; padding: 2px 8px; border-radius: 4px;
+        font: 12px Consolas, monospace; pointer-events: none;
+      }
+    </style>
+  </head>
+  <body>
+    <img id="shot" alt="" />
+    <div id="dim"></div>
+    <div id="box"></div>
+    <div id="size"></div>
+    <div id="hint">드래그해서 캡처할 영역을 선택하세요 · Esc 로 취소</div>
+    <script>
+      const shot = document.getElementById('shot');
+      const box = document.getElementById('box');
+      const sizeLabel = document.getElementById('size');
+      let start = null;
+
+      window.picker.onInit((data) => {
+        shot.src = data.dataUrl;
+        box.style.backgroundImage = `url(${data.dataUrl})`;
+      });
+
+      const rectFrom = (a, b) => ({
+        x: Math.min(a.x, b.x),
+        y: Math.min(a.y, b.y),
+        width: Math.abs(a.x - b.x),
+        height: Math.abs(a.y - b.y),
+      });
+
+      const draw = (rect) => {
+        box.style.display = 'block';
+        box.style.left = `${rect.x}px`;
+        box.style.top = `${rect.y}px`;
+        box.style.width = `${rect.width}px`;
+        box.style.height = `${rect.height}px`;
+        // 선택 영역은 어둡게 덮지 않고 원본을 그대로 보여 줍니다.
+        box.style.backgroundPosition = `${-rect.x - 2}px ${-rect.y - 2}px`;
+        sizeLabel.style.display = 'block';
+        sizeLabel.style.left = `${rect.x}px`;
+        sizeLabel.style.top = `${Math.max(0, rect.y - 24)}px`;
+        sizeLabel.textContent = `${Math.round(rect.width)} × ${Math.round(rect.height)}`;
+      };
+
+      window.addEventListener('mousedown', (event) => {
+        if (event.button !== 0) return;
+        start = { x: event.clientX, y: event.clientY };
+        draw({ x: start.x, y: start.y, width: 0, height: 0 });
+      });
+      window.addEventListener('mousemove', (event) => {
+        if (start) draw(rectFrom(start, { x: event.clientX, y: event.clientY }));
+      });
+      window.addEventListener('mouseup', (event) => {
+        if (!start) return;
+        const rect = rectFrom(start, { x: event.clientX, y: event.clientY });
+        start = null;
+        if (rect.width < 4 || rect.height < 4) {
+          box.style.display = 'none';
+          sizeLabel.style.display = 'none';
+          return;
+        }
+        // 실제 표시 크기를 같이 보내 메인에서 정확한 비율로 좌표를 변환하게 합니다.
+        window.picker.done({ ...rect, viewWidth: window.innerWidth, viewHeight: window.innerHeight });
+      });
+      window.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') window.picker.cancel();
+      });
+      window.addEventListener('contextmenu', (event) => {
+        event.preventDefault();
+        window.picker.cancel();
+      });
+    </script>
+  </body>
+</html>

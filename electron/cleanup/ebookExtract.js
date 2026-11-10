@@ -597,6 +597,20 @@ export function normalizePdfName(raw) {
 }
 
 /**
+ * PDF 화질 값을 해석합니다. 'png'(무손실) 또는 'jpeg100' / 'jpeg90' / 'jpeg80' / 'jpeg70'.
+ * 예전 값 'jpeg' 는 JPEG 90% 로 봅니다.
+ *
+ * @param {unknown} value
+ * @returns {{ format: 'jpeg' | 'png', jpegQuality: number }}
+ */
+function parsePdfQuality(value) {
+  if (value === 'png') return { format: 'png', jpegQuality: 100 };
+  const match = /^jpeg(\d{2,3})$/.exec(String(value ?? ''));
+  const quality = match ? clamp(Number(match[1]), 10, 100) : 90;
+  return { format: 'jpeg', jpegQuality: quality };
+}
+
+/**
  * Merges `pagesDir/0001.png …` into one PDF, one page per image sized to the image.
  * Written to a temporary file first so a cancelled run never leaves a broken PDF.
  *
@@ -604,7 +618,7 @@ export function normalizePdfName(raw) {
  *   pagesDir: string,
  *   pageCount: number,
  *   target: string,
- *   quality: 'jpeg' | 'png',
+ *   quality: { format: 'jpeg' | 'png', jpegQuality: number },
  *   signal?: AbortSignal,
  *   onProgress?: (ratio: number) => void,
  *   log?: (line: string) => void,
@@ -620,10 +634,13 @@ async function buildPdf({ pagesDir, pageCount, target, quality, signal, onProgre
     const png = fs.readFileSync(file);
 
     let image;
-    if (quality === 'png') {
+    if (quality.format === 'png') {
       image = await doc.embedPng(png);
     } else {
-      const jpeg = await sharp(png).flatten({ background: '#ffffff' }).jpeg({ quality: 90, chromaSubsampling: '4:4:4' }).toBuffer();
+      const jpeg = await sharp(png)
+        .flatten({ background: '#ffffff' })
+        .jpeg({ quality: quality.jpegQuality, chromaSubsampling: '4:4:4' })
+        .toBuffer();
       image = await doc.embedJpg(jpeg);
     }
 
@@ -685,7 +702,7 @@ export async function processEbookExtract(args) {
   fs.mkdirSync(pagesDir, { recursive: true });
 
   const windowSize = Math.max(1, Number(args.consecutiveImages) || 3);
-  const similarityPercent = clamp(Number(args.similarityPercent) || 99.9, 80, 100);
+  const similarityPercent = clamp(Number(args.similarityPercent) || 99.9999, 80, 100);
   const maxChanged = (100 - similarityPercent) / 100;
   const skipBlank = args.skipBlank === true;
   const makePdf = args.makePdf !== false;
@@ -801,7 +818,7 @@ export async function processEbookExtract(args) {
         pagesDir,
         pageCount: outputCount,
         target: path.join(outputDir, normalizePdfName(args.pdfName)),
-        quality: args.pdfQuality === 'png' ? 'png' : 'jpeg',
+        quality: parsePdfQuality(args.pdfQuality),
         signal: args.signal,
         onProgress: (ratio) => args.onProgress?.(0.06 + loopSpan + (0.98 - 0.06 - loopSpan) * ratio),
         log,

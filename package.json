@@ -40,6 +40,7 @@
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.1.0",
+    "@nut-tree-fork/nut-js": "^4.2.6",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^6.5.438",
     "react": "^19.3.1",
@@ -65,7 +66,8 @@
     "asarUnpack": [
       "node_modules/sharp/**/*",
       "node_modules/@img/**/*",
-      "node_modules/@napi-rs/**/*"
+      "node_modules/@napi-rs/**/*",
+      "node_modules/@nut-tree-fork/**/*"
     ],
     "extraResources": [
       {

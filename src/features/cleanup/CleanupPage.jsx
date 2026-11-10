@@ -35,24 +35,33 @@ function batchTone(state) {
   return 'amber';
 }
 
-export default function CleanupPage() {
+/**
+ * 정리 화면. `tool` 로 어떤 작업을 보여 줄지 정합니다.
+ *  - `ebook-extract` : 이미지 자르기 & PDF 저장 (스크린샷에서 이북 영역 등을 추출)
+ *  - `pdf-dedup`     : PDF 중복페이지 정리
+ *
+ * @param {{ tool?: 'ebook-extract' | 'pdf-dedup' }} props
+ */
+export default function CleanupPage({ tool = 'ebook-extract' }) {
   const dialog = useDialog();
   const native = getNative();
   const { data, loading, error, reload } = useLoad(() => api('cleanup.tools'));
 
+  const pageTitle = tool === 'pdf-dedup' ? 'PDF 중복페이지 정리' : '이미지 자르기 & PDF 저장';
+  // 저장 폴더는 화면(작업)마다 따로 기억합니다.
+  const outputKey = tool === 'pdf-dedup' ? 'pdfDedupOutput' : 'cleanupOutput';
   const tools = data?.tools ?? [];
-  const [toolId, setToolId] = useState('');
   /** @type {[{ key: string, label: string, path: string }[], Function]} */
   const [inputItems, setInputItems] = useState(/** @type {{ key: string, label: string, path: string }[]} */ ([]));
   const [outputDir, setOutputDir] = useState('');
   const [dedupMode, setDedupMode] = useState(/** @type {'consecutive' | 'global'} */ ('consecutive'));
-  const [similarityPercent, setSimilarityPercent] = useState(99.99);
+  const [similarityPercent, setSimilarityPercent] = useState(99.9999);
   const [consecutiveImages, setConsecutiveImages] = useState(3);
-  const [ebookSimilarity, setEbookSimilarity] = useState(99.9);
+  const [ebookSimilarity, setEbookSimilarity] = useState(99.9999);
   const [skipBlank, setSkipBlank] = useState(false);
   const [makePdf, setMakePdf] = useState(true);
   const [pdfName, setPdfName] = useState('');
-  const [pdfQuality, setPdfQuality] = useState('jpeg');
+  const [pdfQuality, setPdfQuality] = useState('jpeg90');
   /** @type {['auto' | 'manual', Function]} */
   const [cropMode, setCropMode] = useState(/** @type {'auto' | 'manual'} */ ('auto'));
   /** Manual region as ratios (0..1) of the image edges. */
@@ -67,7 +76,7 @@ export default function CleanupPage() {
   const [outputDirLoaded, setOutputDirLoaded] = useState(false);
   useEffect(() => {
     let alive = true;
-    api('folders.get', { key: 'cleanupOutput' })
+    api('folders.get', { key: outputKey })
       .then((res) => {
         if (alive && res?.path) setOutputDir((current) => current || res.path);
       })
@@ -82,22 +91,15 @@ export default function CleanupPage() {
   useEffect(() => {
     if (!outputDirLoaded) return undefined;
     const timer = window.setTimeout(() => {
-      void api('folders.set', { key: 'cleanupOutput', path: outputDir.trim() }).catch(() => undefined);
+      void api('folders.set', { key: outputKey, path: outputDir.trim() }).catch(() => undefined);
     }, 500);
     return () => window.clearTimeout(timer);
   }, [outputDir, outputDirLoaded]);
 
-  const selected = useMemo(
-    () => tools.find((t) => t.id === toolId) ?? tools[0] ?? null,
-    [tools, toolId],
-  );
+  const selected = useMemo(() => tools.find((t) => t.id === tool) ?? null, [tools, tool]);
   const isEbook = selected?.id === 'ebook-extract';
   const isPdf = selected?.id === 'pdf-dedup';
   const inputPaths = useMemo(() => inputItems.map((item) => item.path), [inputItems]);
-
-  useEffect(() => {
-    if (!toolId && tools[0]) setToolId(tools[0].id);
-  }, [tools, toolId]);
 
   useEffect(() => {
     if (!selected?.inputExts?.length) return;
@@ -105,10 +107,29 @@ export default function CleanupPage() {
     setInputItems((prev) => prev.filter((item) => allowed.has(fileExt(item.path))));
   }, [selected?.id]);
 
-  // The preview shows the first image, so it is stale once the list changes.
+  // 미리보기는 첫 이미지 기준이라 목록이 바뀌면 낡은 값이 됩니다.
+  // 이미지 자르기 화면에서는 목록이 바뀔 때마다 영역 미리보기를 자동으로 다시 만듭니다.
   useEffect(() => {
     setPreview(null);
-  }, [inputPaths.join('|')]);
+    if (!isEbook || inputPaths.length === 0) {
+      setPreviewLoading(false);
+      return undefined;
+    }
+    let alive = true;
+    setPreviewLoading(true);
+    api('cleanup.ebookPreview', { inputPaths })
+      .then((res) => {
+        if (alive) setPreview(res);
+      })
+      // 자동 불러오기 실패는 조용히 넘기고, "영역 미리보기" 버튼으로 다시 시도하게 둡니다.
+      .catch(() => undefined)
+      .finally(() => {
+        if (alive) setPreviewLoading(false);
+      });
+    return () => {
+      alive = false;
+    };
+  }, [isEbook, inputPaths.join('|')]);
 
   useEffect(() => {
     if (!job || (job.state !== 'queued' && job.state !== 'running')) return undefined;
@@ -165,7 +186,7 @@ export default function CleanupPage() {
       });
       if (files.length === 0) {
         void dialog.alert({
-          title: '이북(eBook) 정리',
+          title: pageTitle,
           body: `폴더에 지원하는 파일이 없습니다. (${selected.inputExts.join(', ')})\n${dir}`,
         });
         return;
@@ -173,7 +194,7 @@ export default function CleanupPage() {
       addPaths(files.map((p) => ({ path: p, label: fileName(p) })));
     } catch (err) {
       void dialog.alert({
-        title: '이북(eBook) 정리',
+        title: pageTitle,
         body: err instanceof Error ? err.message : '폴더를 읽지 못했습니다.',
       });
     }
@@ -200,7 +221,7 @@ export default function CleanupPage() {
 
   const pickOutputDir = async () => {
     if (!native?.pickDirectory) return;
-    const result = await native.pickDirectory({ memoryKey: 'cleanupOutput' });
+    const result = await native.pickDirectory({ memoryKey: outputKey });
     if (result?.canceled || !result?.path) return;
     setOutputDir(result.path);
   };
@@ -212,7 +233,7 @@ export default function CleanupPage() {
       setPreview(await api('cleanup.ebookPreview', { inputPaths }));
     } catch (err) {
       void dialog.alert({
-        title: '이북(eBook) 정리',
+        title: pageTitle,
         body: err instanceof Error ? err.message : '미리보기를 만들지 못했습니다.',
       });
     } finally {
@@ -259,12 +280,12 @@ export default function CleanupPage() {
   const start = async () => {
     if (!selected) return;
     if (inputPaths.length === 0) {
-      void dialog.alert({ title: '이북(eBook) 정리', body: '입력 파일을 선택해 주세요.' });
+      void dialog.alert({ title: pageTitle, body: '입력 파일을 선택해 주세요.' });
       return;
     }
     if (isEbook && cropMode === 'manual' && !manualBox) {
       void dialog.alert({
-        title: '이북(eBook) 정리',
+        title: pageTitle,
         body: '수동 영역이 지정되지 않았습니다. "영역 미리보기"를 눌러 이미지에서 영역을 드래그하세요.',
       });
       return;
@@ -303,7 +324,7 @@ export default function CleanupPage() {
       }
     } catch (err) {
       void dialog.alert({
-        title: '이북(eBook) 정리',
+        title: pageTitle,
         body: err instanceof Error ? err.message : '작업을 시작하지 못했습니다.',
       });
     } finally {
@@ -319,7 +340,7 @@ export default function CleanupPage() {
       setJob(next);
     } catch (err) {
       void dialog.alert({
-        title: '이북(eBook) 정리',
+        title: pageTitle,
         body: err instanceof Error ? err.message : '중지하지 못했습니다.',
       });
     } finally {
@@ -337,32 +358,19 @@ export default function CleanupPage() {
     <div className="h-full overflow-auto p-6">
       <div className="mx-auto max-w-3xl space-y-5">
         <section>
-          <h1 className="m-0 text-xl font-semibold text-slate-900">이북(eBook) 정리</h1>
+          <h1 className="m-0 text-xl font-semibold text-slate-900">{pageTitle}</h1>
           <p className="mt-1 text-sm text-slate-500">
-            이북(eBook) 스크린샷 영역 추출과 PDF 중복 페이지 제거를 한곳에서 실행합니다.
+            {isPdf
+              ? 'PDF 에서 비슷한 페이지를 찾아 제거합니다. 여러 PDF 를 한 번에 처리할 수 있습니다.'
+              : '스크린샷 같은 이미지에서 특정 영역(예: 이북 화면)을 자동으로 잘라 내고, 연속된 유사 이미지는 제외합니다. 원하면 PDF 로 합칠 수 있습니다.'}
           </p>
         </section>
 
         <Section title="작업 설정">
           <div className="space-y-4">
-            <Field label="작업 종류">
-              <select
-                className={inputClass}
-                value={selected?.id ?? ''}
-                onChange={(event) => setToolId(event.target.value)}
-              >
-                {tools.map((tool) => (
-                  <option key={tool.id} value={tool.id}>
-                    {tool.label}
-                  </option>
-                ))}
-              </select>
-              {selected?.description ? (
-                <p className="m-0 mt-1 text-xs text-slate-500">{selected.description}</p>
-              ) : null}
-            </Field>
 
             <Field
+              group
               label="입력 파일"
               hint={
                 selected
@@ -464,6 +472,7 @@ export default function CleanupPage() {
 
             {isEbook ? (
               <Field
+                group
                 label="이북 영역"
                 hint="여러 장에서 감지한 영역의 합의 결과를 모든 이미지에 같은 비율로 적용합니다. 자동 감지가 어긋나면 수동으로 지정하세요."
               >
@@ -510,9 +519,15 @@ export default function CleanupPage() {
                           setManualBox(next);
                         }}
                       />
-                      <p className="m-0 text-center text-xs text-slate-500">
+                      <p className="m-0 text-xs text-slate-500">
                         {cropMode === 'manual'
-                          ? '테두리·모서리를 끌어 크기를, 안쪽을 끌어 위치를 조절하고, 바깥을 끌면 새로 그립니다. (첫 번째 이미지 기준, 모든 이미지에 같은 비율로 적용)'
+                          ? (
+                              <>
+                                테두리·모서리를 끌어 크기를, 안쪽을 끌어 위치를 조절하고, 바깥을 끌면 새로 그립니다.
+                                <br />
+                                (첫 번째 이미지 기준, 모든 이미지에 같은 비율로 적용)
+                              </>
+                            )
                           : preview.method === 'fallback'
                             ? '자동 감지에 실패해 기본 비율 영역을 보여 줍니다. 수동 지정을 권장합니다.'
                             : `${preview.sampled}장 중 ${preview.detectedCount}장에서 감지, ${preview.agreed}장 일치${
@@ -522,7 +537,11 @@ export default function CleanupPage() {
                     </div>
                   ) : (
                     <p className="m-0 text-xs text-slate-400">
-                      "영역 미리보기"를 누르면 첫 이미지와 감지된 영역을 확인할 수 있습니다.
+                      {previewLoading
+                        ? '첫 이미지와 감지된 영역을 분석하는 중입니다…'
+                        : inputItems.length === 0
+                          ? '이미지를 추가하면 첫 이미지와 감지된 영역이 자동으로 표시됩니다.'
+                          : '"영역 미리보기"를 누르면 첫 이미지와 감지된 영역을 확인할 수 있습니다.'}
                     </p>
                   )}
 
@@ -568,13 +587,13 @@ export default function CleanupPage() {
                     <option value="global">문서 전체</option>
                   </select>
                 </Field>
-                <Field label="유사도 (%)" hint="기본 99.99 — 이 값 이상이면 중복으로 봅니다.">
+                <Field label="유사도 (%)" hint="기본 99.9999 — 이 값 이상이면 중복으로 봅니다.">
                   <input
                     className={inputClass}
                     type="number"
                     min={90}
                     max={100}
-                    step={0.01}
+                    step={0.0001}
                     value={similarityPercent}
                     onChange={(event) => setSimilarityPercent(Number(event.target.value))}
                   />
@@ -594,14 +613,14 @@ export default function CleanupPage() {
                 </Field>
                 <Field
                   label="유사도 (%)"
-                  hint="기본 99.9 — 변경된 픽셀이 (100 − 값)% 이하이고 한 곳에 몰린 변화가 없으면 중복으로 봅니다. 문장 하나만 달라도 구분하려면 값을 높이세요."
+                  hint="기본 99.9999 — 변경된 픽셀이 (100 − 값)% 이하이고 한 곳에 몰린 변화가 없으면 중복으로 봅니다. 문장 하나만 달라도 구분하려면 값을 높이세요."
                 >
                   <input
                     className={inputClass}
                     type="number"
                     min={90}
                     max={100}
-                    step={0.01}
+                    step={0.0001}
                     value={ebookSimilarity}
                     onChange={(event) => setEbookSimilarity(Number(event.target.value))}
                   />
@@ -629,13 +648,19 @@ export default function CleanupPage() {
                         onChange={(event) => setPdfName(event.target.value)}
                       />
                     </Field>
-                    <Field label="PDF 화질" hint="JPEG 는 용량이 훨씬 작고, PNG 는 무손실입니다.">
+                    <Field
+                      label="PDF 화질"
+                      hint="JPEG 는 100% 여도 손실 압축이라 PNG 와 같지 않지만 용량이 훨씬 작습니다. PNG 는 무손실이라 용량이 가장 큽니다."
+                    >
                       <select
                         className={inputClass}
                         value={pdfQuality}
                         onChange={(event) => setPdfQuality(event.target.value)}
                       >
-                        <option value="jpeg">JPEG 90% (용량 작음)</option>
+                        <option value="jpeg100">JPEG 100% (최고 화질)</option>
+                        <option value="jpeg90">JPEG 90% (권장)</option>
+                        <option value="jpeg80">JPEG 80%</option>
+                        <option value="jpeg70">JPEG 70% (용량 작음)</option>
                         <option value="png">PNG 원본 (무손실)</option>
                       </select>
                     </Field>
@@ -720,7 +745,7 @@ export default function CleanupPage() {
                     </p>
                   ) : null}
                   {native?.showItemInFolder ? (
-                    <div className="flex flex-wrap gap-2">
+                    <div className="flex flex-wrap gap-2 pt-2">
                       {job.result.pdfPath ? (
                         <button
                           type="button"

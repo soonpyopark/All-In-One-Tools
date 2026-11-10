@@ -5,11 +5,12 @@
  * `register()` 에서 `defineApi()` 로 API 를 등록한 뒤, 아래 배열에 추가하세요.
  * 프론트엔드 쪽 등록 지점은 `src/features/registry.js` 입니다.
  */
+import * as capture from './capture.js';
 import * as cleanup from './cleanup.js';
 import * as convert from './convert.js';
 
 /** @type {{ register: () => void }[]} */
-const MODULES = [convert, cleanup];
+const MODULES = [convert, cleanup, capture];
 
 export function registerModules() {
   for (const mod of MODULES) mod.register();

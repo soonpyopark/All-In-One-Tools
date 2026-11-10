@@ -2,7 +2,7 @@
 
 ![All In One Tools](assets-src/logo-horizontal.png)
 
-로컬 전용 Electron 도구 모음(Movie2GIF 변환, 피치&볼륨 조절, 이북(eBook) 정리(영역 추출·PDF 중복 페이지 제거), 서브넷 계산기). 로그인·회원·웹 접속 없이 이 PC에서만 동작하며, **기능만 추가**하면 된다.
+로컬 전용 Electron 도구 모음(매크로 화면 캡처(화면·창·영역 캡처, 키보드·마우스 매크로 프리셋), 이미지 자르기 & PDF 저장, PDF 중복페이지 정리, Movie2GIF 변환, GIF 이어붙이기, 영상(음원) 피치 & 볼륨 조절, 서브넷 계산기). 로그인·회원·웹 접속 없이 이 PC에서만 동작하며, **기능만 추가**하면 된다.
 
 ## 명령
 
@@ -29,7 +29,8 @@
 - `main.js`, `preload.cjs` — Electron 진입점 (API 호출과 파일/폴더 선택 등 네이티브 기능은 preload 로 노출, 메인에서 요청 출처 검증)
 - `electron/devRenderer.js` — 개발 시 화면을 `.dev-dist/` 로 감시 빌드 (운영은 `dist/` 를 파일로 로드)
 - `electron/api/coreApi.js` — 기본 API (앱 정보, 설정, 업데이트 확인)
-- `electron/modules/*` — 기능별 API (변환, 이북)
+- `electron/modules/*` — 기능별 API (변환, 이미지 자르기·PDF 저장·PDF 정리, 매크로 화면 캡처)
+- `electron/capture/*` — 매크로 화면 캡처: 화면·창·영역 캡처(`screenCapture.js`), 영역 선택 오버레이(`regionPicker.*`), 매크로 실행기(`macroRunner.js`, 키보드·마우스는 nut.js), 프리셋 저장(`presets.js` → `macros.json`)
 - `electron/settingsService.js` — 설정 저장
 - `shared/*` — 메인/화면 공용 코드 (`constants.js` 에 앱 이름·버전)
 - `src/` — React 화면. `src/lib/apiClient.js` 가 API 클라이언트 (`window.frame.api` → IPC `api:call` → `dispatchApi`)
@@ -47,6 +48,7 @@
 - 개발: `<프로젝트>/data` (설정 `settings.json`)
 - portable: exe 옆 `data` (zip 안에 `.portable` 표시 파일 포함)
 - 설치형: 사용자 데이터 폴더 아래 `data`
+- 매크로 화면 캡처의 프리셋은 같은 `data` 폴더의 `macros.json` 에 저장된다. 캡처 이미지의 기본 저장 위치는 `사진/All In One Tools`.
 - `APP_DATA_DIR` 환경변수로 재지정 가능
 
 ## 앱 이름·버전 바꾸기

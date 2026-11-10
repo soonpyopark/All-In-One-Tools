@@ -67,7 +67,7 @@ export default function AppShell() {
 
       <div className="flex min-h-0 flex-1">
         {features.length > 1 ? (
-          <nav className="w-52 shrink-0 overflow-auto bg-app-sidebar p-2" aria-label="기능">
+          <nav className="w-64 shrink-0 overflow-auto bg-app-sidebar p-2" aria-label="기능">
             {features.map((feature) => {
               const selected = feature.id === active?.id;
               return (
@@ -75,7 +75,7 @@ export default function AppShell() {
                   key={feature.id}
                   type="button"
                   aria-current={selected ? 'page' : undefined}
-                  className={`mb-1 flex w-full items-center gap-2 rounded-md px-3 py-2 text-left text-sm transition-colors ${
+                  className={`mb-1 flex w-full items-center gap-2 whitespace-nowrap rounded-md px-3 py-2 text-left text-sm transition-colors ${
                     selected
                       ? 'bg-app-sidebarHover font-semibold text-white'
                       : 'text-slate-300 hover:bg-app-sidebarHover/60 hover:text-white'

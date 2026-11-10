@@ -22,7 +22,7 @@ export default function HomePage({ features = [], onNavigate }) {
           <div>
             <h1 className="m-0 text-xl font-semibold text-slate-900">{appInfo.name}</h1>
             <p className="mt-1 text-sm text-slate-500">
-              Movie2GIF 변환, 피치&볼륨 조절, 이북(eBook) 정리(영역 추출·PDF 중복 페이지 제거), 서브넷 계산기 기능을 사용할 수 있습니다.
+              매크로 화면 캡처, 이미지 자르기 & PDF 저장, PDF 중복페이지 정리, Movie2GIF 변환, GIF 이어붙이기, 영상(음원) 피치 & 볼륨 조절, 서브넷 계산기 기능을 사용할 수 있습니다.
             </p>
           </div>
         </section>
@@ -62,7 +62,7 @@ export default function HomePage({ features = [], onNavigate }) {
           <h2 className="m-0 text-sm font-semibold text-slate-800">시작하기</h2>
           <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-sm leading-relaxed text-slate-600">
             <li>환경설정 → 일반의 FFmpeg 경로에서 ffmpeg 폴더를 지정하거나 PATH를 확인합니다.</li>
-            <li>Movie2GIF 변환 / 피치&볼륨 조절 / 이북(eBook) 정리 메뉴에서 파일을 고르고 옵션을 설정합니다.</li>
+            <li>왼쪽 메뉴(매크로 화면 캡처, 이미지 자르기 & PDF 저장, PDF 중복페이지 정리, Movie2GIF 변환, GIF 이어붙이기, 영상(음원) 피치 & 볼륨 조절 등)에서 파일을 고르고 옵션을 설정합니다.</li>
             <li>결과는 기본적으로 원본 파일이 있는 폴더에 저장됩니다. (각 화면에서 저장 폴더 변경 가능)</li>
           </ol>
         </section>

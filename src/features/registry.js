@@ -15,8 +15,11 @@
  * }} FeatureDefinition
  */
 import AdjustPage from './adjust/AdjustPage.jsx';
+import CapturePage from './capture/CapturePage.jsx';
 import CleanupPage from './cleanup/CleanupPage.jsx';
+import PdfDedupPage from './cleanup/PdfDedupPage.jsx';
 import ConvertPage from './convert/ConvertPage.jsx';
+import MergeGifsPage from './convert/MergeGifsPage.jsx';
 import HomePage from './home/HomePage.jsx';
 import SubnetPage from './subnet/SubnetPage.jsx';
 
@@ -24,24 +27,48 @@ import SubnetPage from './subnet/SubnetPage.jsx';
 export const FEATURES = [
   { id: 'home', label: '홈', icon: '🏠', component: HomePage },
   {
+    id: 'capture',
+    label: '매크로 화면 캡처',
+    icon: '📸',
+    description: '화면·창·영역을 캡처하고, 키보드·마우스 매크로 프리셋으로 페이지를 넘기며 자동 캡처합니다.',
+    color: ['#ff7aa8', '#e0426f'],
+    component: CapturePage,
+  },
+  {
     id: 'cleanup',
-    label: '이북(eBook) 정리',
+    label: '이미지 자르기 & PDF 저장',
     icon: '📚',
-    description: '스크린샷에서 이북 영역을 추출해 PDF 로 만들고, PDF 의 중복 페이지를 제거합니다.',
+    description: '스크린샷 같은 이미지에서 특정 영역(예: 이북 화면)을 자동으로 추출하고, 연속된 유사 이미지는 제외해 PDF 로 만듭니다.',
     color: ['#40e0a8', '#11a46b'],
     component: CleanupPage,
+  },
+  {
+    id: 'pdf-dedup',
+    label: 'PDF 중복페이지 정리',
+    icon: '🧹',
+    description: 'PDF 에서 비슷한 페이지를 찾아 제거합니다. (연속 / 문서 전체)',
+    color: ['#2dd4bf', '#0f9488'],
+    component: PdfDedupPage,
   },
   {
     id: 'convert',
     label: 'Movie2GIF 변환',
     icon: '🎞️',
-    description: '동영상을 GIF 로 바꾸고, 여러 GIF 를 하나로 합칩니다.',
+    description: '동영상을 GIF 로 변환합니다. 용량 프리셋으로 FPS·너비를 맞출 수 있습니다.',
     color: ['#5ca6ff', '#2f6be5'],
     component: ConvertPage,
   },
   {
+    id: 'merge-gifs',
+    label: 'GIF 이어붙이기',
+    icon: '🔗',
+    description: '여러 GIF 를 순서대로 이어 붙여 하나의 GIF 로 만듭니다.',
+    color: ['#7dd3fc', '#2b8fd6'],
+    component: MergeGifsPage,
+  },
+  {
     id: 'adjust',
-    label: '피치&볼륨 조절',
+    label: '영상(음원) 피치 & 볼륨 조절',
     icon: '🎛️',
     description: '영상·음원의 피치(음높이)와 볼륨을 조절합니다.',
     color: ['#b79cff', '#7d58df'],

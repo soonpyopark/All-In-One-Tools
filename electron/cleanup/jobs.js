@@ -87,7 +87,7 @@ async function runJob(job) {
           inputPath,
           outputDir: preferredDir || path.dirname(inputPath),
           mode: options.mode === 'global' ? 'global' : 'consecutive',
-          similarityPercent: Number(options.similarityPercent) || 99.99,
+          similarityPercent: Number(options.similarityPercent) || 99.9999,
           signal: controller.signal,
           onProgress: (ratio) => {
             const base = i / job.inputPaths.length;
@@ -123,11 +123,11 @@ async function runJob(job) {
         outputDir: job.outputPath,
         manualCrop: options.manualCrop ?? null,
         consecutiveImages: Number(options.consecutiveImages) || 3,
-        similarityPercent: Number(options.similarityPercent) || 99.9,
+        similarityPercent: Number(options.similarityPercent) || 99.9999,
         skipBlank: options.skipBlank === true,
         makePdf: options.makePdf !== false,
         pdfName: typeof options.pdfName === 'string' ? options.pdfName : '',
-        pdfQuality: options.pdfQuality === 'png' ? 'png' : 'jpeg',
+        pdfQuality: typeof options.pdfQuality === 'string' ? options.pdfQuality : 'jpeg90',
         signal: controller.signal,
         onProgress: (ratio) => {
           job.progress = Math.min(0.99, ratio);
@@ -210,7 +210,7 @@ export function startCleanupJob(body) {
   const job = {
     id,
     kind,
-    label: kind === 'ebook-extract' ? '이북(eBook) 영역 추출' : 'PDF 중복 페이지 제거',
+    label: kind === 'ebook-extract' ? '이미지 자르기 & PDF 저장' : 'PDF 중복 페이지 제거',
     inputPaths,
     outputPath,
     state: 'queued',

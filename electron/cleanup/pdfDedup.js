@@ -12,7 +12,7 @@ const workerPath = path.join(pdfjsRoot, 'legacy/build/pdf.worker.mjs');
 const standardFontDataUrl = pathToFileURL(path.join(pdfjsRoot, 'standard_fonts') + path.sep).href;
 GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href;
 
-export const DEFAULT_SIMILARITY_PERCENT = 99.99;
+export const DEFAULT_SIMILARITY_PERCENT = 99.9999;
 
 /**
  * @param {unknown} percent

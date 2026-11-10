@@ -9,8 +9,8 @@ export function register() {
     tools: [
       {
         id: 'ebook-extract',
-        label: '이북(eBook) 영역 추출',
-        description: '스크린샷에서 전자책 영역을 잘라 내고, 연속 유사 이미지는 제외합니다.',
+        label: '이미지 자르기 & PDF 저장',
+        description: '스크린샷 같은 이미지에서 특정 영역(예: 이북 화면)을 잘라 내고, 연속 유사 이미지는 제외합니다.',
         inputExts: EBOOK_INPUT_EXTS,
         minInputs: 1,
       },

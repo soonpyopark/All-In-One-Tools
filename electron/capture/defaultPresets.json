@@ -1,0 +1,43 @@
+{
+  "presets": [
+    {
+      "id": "default-macro",
+      "name": "기본 매크로",
+      "startKey": "F6",
+      "stopKey": "F7",
+      "repeat": 1000,
+      "outputDir": "",
+      "format": "png",
+      "jpegQuality": 90,
+      "detectSame": true,
+      "changeTimeoutMs": 20000,
+      "resendOnTimeout": false,
+      "sameThreshold": 0.0001,
+      "hideApp": false,
+      "startDelayMs": 1000,
+      "steps": [
+        {
+          "type": "capture",
+          "target": {
+            "mode": "screen",
+            "displayId": null,
+            "windowTitle": "",
+            "region": null
+          }
+        },
+        {
+          "type": "mouse",
+          "action": "click",
+          "button": "left",
+          "x": 2550,
+          "y": 500,
+          "amount": 3
+        },
+        {
+          "type": "delay",
+          "ms": 500
+        }
+      ]
+    }
+  ]
+}

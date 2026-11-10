@@ -49,7 +49,14 @@ function batchTone(state) {
   return 'amber';
 }
 
-export default function ConvertPage() {
+/**
+ * 변환 화면. `mode` 로 어떤 변환을 보여 줄지 정합니다.
+ *  - `gif`   : Movie2GIF 변환 (동영상 → GIF)
+ *  - `merge` : GIF 이어붙이기 (여러 GIF → 하나의 GIF)
+ *
+ * @param {{ mode?: 'gif' | 'merge' }} props
+ */
+export default function ConvertPage({ mode = 'gif' }) {
   const dialog = useDialog();
   const native = getNative();
   const { data, loading, error, reload } = useLoad(() => api('convert.listConverters'));
@@ -59,8 +66,13 @@ export default function ConvertPage() {
   } = useLoad(() => api('convert.exportDir'));
 
   const converters = useMemo(
-    () => (data?.converters ?? []).filter((c) => c.optionProfile !== 'pitch-volume'),
-    [data],
+    () =>
+      (data?.converters ?? []).filter((c) => {
+        if (c.optionProfile === 'pitch-volume') return false;
+        const isMerge = c.optionProfile === 'merge-gifs' || c.jobMode === 'merge';
+        return mode === 'merge' ? isMerge : !isMerge;
+      }),
+    [data, mode],
   );
   const [converterId, setConverterId] = useState('');
   /** @type {[{ key: string, label: string, path: string }[], Function]} */
@@ -401,7 +413,9 @@ export default function ConvertPage() {
     <div className="h-full overflow-auto p-6">
       <div className="mx-auto max-w-3xl space-y-5">
         <section>
-          <h1 className="m-0 text-xl font-semibold text-slate-900">Movie2GIF 변환</h1>
+          <h1 className="m-0 text-xl font-semibold text-slate-900">
+            {isMergeProfile ? 'GIF 이어붙이기' : 'Movie2GIF 변환'}
+          </h1>
           <p className="mt-1 text-sm text-slate-500">
             {isMergeProfile
               ? '여러 GIF를 순서대로 이어 붙여 하나의 GIF로 만듭니다.'
@@ -414,24 +428,30 @@ export default function ConvertPage() {
 
         <Section title="변환 설정">
           <div className="space-y-4">
-            <Field label="변환 종류">
-              <select
-                className={inputClass}
-                value={selected?.id ?? ''}
-                onChange={(event) => setConverterId(event.target.value)}
-              >
-                {converters.map((c) => (
-                  <option key={c.id} value={c.id}>
-                    {c.label}
-                  </option>
-                ))}
-              </select>
-              {selected?.description ? (
-                <p className="m-0 mt-1 text-xs text-slate-500">{selected.description}</p>
-              ) : null}
-            </Field>
+            {/* 화면(모드)마다 변환 종류가 하나뿐이면 선택 상자 없이 설명만 보여 줍니다. */}
+            {converters.length > 1 ? (
+              <Field label="변환 종류">
+                <select
+                  className={inputClass}
+                  value={selected?.id ?? ''}
+                  onChange={(event) => setConverterId(event.target.value)}
+                >
+                  {converters.map((c) => (
+                    <option key={c.id} value={c.id}>
+                      {c.label}
+                    </option>
+                  ))}
+                </select>
+                {selected?.description ? (
+                  <p className="m-0 mt-1 text-xs text-slate-500">{selected.description}</p>
+                ) : null}
+              </Field>
+            ) : selected?.description ? (
+              <p className="m-0 text-xs text-slate-500">{selected.description}</p>
+            ) : null}
 
             <Field
+              group
               label="입력 파일"
               hint={
                 selected

@@ -6,6 +6,13 @@ export const inputClass =
 export const btnClass =
   'inline-flex items-center justify-center gap-1.5 rounded-md border border-slate-300 bg-white px-3 py-1.5 text-sm font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50';
 
+/** 한 줄에 여러 개를 놓는 촘촘한 입력/버튼 (매크로 단계 편집 등). */
+export const inputSmClass =
+  'rounded-md border border-slate-300 bg-white px-2 py-1 text-sm text-slate-800 outline-none focus:border-app-accent focus:ring-2 focus:ring-app-accent/15 disabled:bg-slate-50 disabled:text-slate-400';
+
+export const btnSmClass =
+  'inline-flex items-center justify-center gap-1 rounded-md border border-slate-300 bg-white px-2.5 py-1 text-xs font-medium text-slate-700 transition-colors hover:bg-slate-50 disabled:opacity-50';
+
 export const btnPrimaryClass =
   'inline-flex items-center justify-center gap-1.5 rounded-md border border-transparent bg-app-accent px-3 py-1.5 text-sm font-medium text-white transition-colors hover:bg-app-accentHover disabled:opacity-50';
 
@@ -68,14 +75,21 @@ export function ToggleRow({ label, hint, checked, disabled = false, onChange }) 
   );
 }
 
-/** @param {{ label: string, hint?: string, children: import('react').ReactNode }} props */
-export function Field({ label, hint, children }) {
+/**
+ * 라벨 + 입력 묶음.
+ * 기본은 `<label>` 이라 라벨을 눌러도 입력에 포커스가 가지만, 안에 라디오·미리보기처럼
+ * 입력이 여러 개이거나 직접 클릭을 받는 요소가 있으면 빈 곳 클릭이 첫 입력으로 전달되므로
+ * `group` 으로 `<div>` 를 사용합니다.
+ * @param {{ label: string, hint?: string, group?: boolean, children: import('react').ReactNode }} props
+ */
+export function Field({ label, hint, group = false, children }) {
+  const Tag = group ? 'div' : 'label';
   return (
-    <label className="flex flex-col gap-2">
+    <Tag className="flex flex-col gap-2">
       <span className="block text-xs font-medium text-slate-600">{label}</span>
       {children}
       {hint ? <span className="block text-xs leading-relaxed text-slate-400">{hint}</span> : null}
-    </label>
+    </Tag>
   );
 }
 

@@ -248,7 +248,7 @@ export default function AdjustPage() {
     <div className="h-full overflow-auto p-6">
       <div className="mx-auto max-w-3xl space-y-5">
         <section>
-          <h1 className="m-0 text-xl font-semibold text-slate-900">피치&볼륨 조절</h1>
+          <h1 className="m-0 text-xl font-semibold text-slate-900">영상(음원) 피치 & 볼륨 조절</h1>
           <p className="mt-1 text-sm text-slate-500">
             영상·음원의 피치와 볼륨을 조절합니다. 여러 파일을 한 번에 처리할 수 있습니다.
             {' 영상은 비디오를 유지한 채 오디오만 변환합니다.'}
@@ -258,6 +258,7 @@ export default function AdjustPage() {
         <Section title="조절 설정">
           <div className="space-y-4">
             <Field
+              group
               label="입력 파일"
               hint={`지원: ${inputExts.join(', ')} · ${inputItems.length}개`}
             >
