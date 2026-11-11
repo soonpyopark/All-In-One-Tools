@@ -1,6 +1,6 @@
 # All In One Tools
 
-![All-In-One-Tools](assets-src/logo-horizontal.png)
+![All-In-One-Tools](assets-src/logo-all-in-one-tools.png)
 
 ![실행 화면](assets-src/screenshot-home.png)
 
