@@ -10,6 +10,7 @@ const SETTINGS_FILE = 'settings.json';
  *   version: 1,
  *   accentColor: string,
  *   startupUpdateCheck: boolean,
+ *   closeToTray: boolean,
  *   ffmpegDir: string,
  *   exportDir: string,
  *   folders: Record<string, string>,
@@ -22,6 +23,7 @@ function defaultSettings() {
     version: 1,
     accentColor: DEFAULT_ACCENT_COLOR,
     startupUpdateCheck: true,
+    closeToTray: false,
     ffmpegDir: '',
     exportDir: '',
     folders: {},
@@ -59,6 +61,7 @@ function normalizeSettings(raw) {
     version: 1,
     accentColor: normalizeAccentColor(src.accentColor, base.accentColor),
     startupUpdateCheck: src.startupUpdateCheck !== false,
+    closeToTray: src.closeToTray === true,
     ffmpegDir: typeof src.ffmpegDir === 'string' ? src.ffmpegDir.trim() : base.ffmpegDir,
     exportDir: typeof src.exportDir === 'string' ? src.exportDir.trim() : base.exportDir,
     folders: normalizeFolders(src.folders),
@@ -77,8 +80,8 @@ export function getSettings() {
 
 /** Fields the renderer needs before anything else (theme + startup behaviour). */
 export function getPublicSettings() {
-  const { accentColor, startupUpdateCheck } = load();
-  return { accentColor, startupUpdateCheck };
+  const { accentColor, startupUpdateCheck, closeToTray } = load();
+  return { accentColor, startupUpdateCheck, closeToTray };
 }
 
 /**

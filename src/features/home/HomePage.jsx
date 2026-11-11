@@ -15,20 +15,20 @@ export default function HomePage({ features = [], onNavigate }) {
   const appInfo = useAppInfo();
 
   return (
-    <div className="h-full overflow-auto p-6">
-      <div className="mx-auto max-w-3xl space-y-6">
+    <div className="h-full overflow-auto py-6 pl-6 pr-20">
+      <div className="space-y-6">
         <section className="flex items-center gap-4">
           <AppLogo size={64} className="rounded-2xl shadow-sm" />
           <div>
             <h1 className="m-0 text-xl font-semibold text-slate-900">{appInfo.name}</h1>
             <p className="mt-1 text-sm text-slate-500">
-              매크로 화면 캡처, 이미지 자르기 & PDF 저장, PDF 중복페이지 정리, Movie2GIF 변환, GIF 이어붙이기, 영상(음원) 피치 & 볼륨 조절, 서브넷 계산기 기능을 사용할 수 있습니다.
+              매크로 화면 캡처, 이미지 자르기 & PDF 저장, PDF 중복페이지 정리, PDF & 이미지 OCR, 파일명 일괄 변경, Movie2GIF 변환, GIF 이어붙이기, QR 코드 생성기, 영상(음원) 피치 & 볼륨 조절, 서브넷 계산기 기능을 사용할 수 있습니다.
             </p>
           </div>
         </section>
 
         {shortcuts.length > 0 ? (
-          <section aria-label="바로가기" className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+          <section aria-label="바로가기" className="grid grid-cols-[repeat(auto-fill,minmax(16rem,1fr))] gap-3">
             {shortcuts.map((feature) => (
               <button
                 key={feature.id}
@@ -62,7 +62,7 @@ export default function HomePage({ features = [], onNavigate }) {
           <h2 className="m-0 text-sm font-semibold text-slate-800">시작하기</h2>
           <ol className="mt-2 list-decimal space-y-1.5 pl-5 text-sm leading-relaxed text-slate-600">
             <li>환경설정 → 일반의 FFmpeg 경로에서 ffmpeg 폴더를 지정하거나 PATH를 확인합니다.</li>
-            <li>왼쪽 메뉴(매크로 화면 캡처, 이미지 자르기 & PDF 저장, PDF 중복페이지 정리, Movie2GIF 변환, GIF 이어붙이기, 영상(음원) 피치 & 볼륨 조절 등)에서 파일을 고르고 옵션을 설정합니다.</li>
+            <li>왼쪽 메뉴(매크로 화면 캡처, 이미지 자르기 & PDF 저장, PDF 중복페이지 정리, PDF & 이미지 OCR, 파일명 일괄 변경, Movie2GIF 변환, GIF 이어붙이기, QR 코드 생성기, 영상(음원) 피치 & 볼륨 조절 등)에서 파일을 고르고 옵션을 설정합니다.</li>
             <li>결과는 기본적으로 원본 파일이 있는 폴더에 저장됩니다. (각 화면에서 저장 폴더 변경 가능)</li>
           </ol>
         </section>

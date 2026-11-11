@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import InputDropZone from '../../components/common/InputDropZone.jsx';
 import { api, getNative } from '../../lib/apiClient.js';
 import { useDialog } from '../../context/DialogContext.jsx';
+import { useReportJobRunning } from '../../context/JobActivityContext.jsx';
+import { useJobProgressScroll } from '../../hooks/useJobProgressScroll.js';
 import { useLoad } from '../../hooks/useLoad.js';
 import {
   PITCH_ORIGINAL,
@@ -50,7 +53,7 @@ function batchTone(state) {
   return 'amber';
 }
 
-export default function AdjustPage() {
+export default function AdjustPage({ featureId } = {}) {
   const dialog = useDialog();
   const native = getNative();
   const { data, loading, error, reload } = useLoad(() => api('convert.listConverters'));
@@ -75,6 +78,7 @@ export default function AdjustPage() {
   const [batch, setBatch] = useState(/** @type {any} */ (null));
   const [busy, setBusy] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const [includeSub, setIncludeSub] = useState(false);
 
   const inputPaths = useMemo(() => inputItems.map((item) => item.path), [inputItems]);
   const pitchStages = converter?.pitchStages?.length ? converter.pitchStages : PITCH_STAGES;
@@ -121,6 +125,28 @@ export default function AdjustPage() {
     });
   };
 
+  const ingestPaths = async (paths) => {
+    if (!paths?.length) return;
+    try {
+      const { files, skipped, truncated } = await api('files.inspect', {
+        paths,
+        recursive: includeSub,
+        exts: inputExts,
+      });
+      addPaths(files.map((file) => ({ path: file.path, label: file.name })));
+      const notes = [];
+      if (files.length === 0) notes.push(`추가할 파일이 없습니다. (지원: ${inputExts.join(', ')})`);
+      if (skipped > 0) notes.push(`지원하지 않는 항목 ${skipped}개는 제외했습니다.`);
+      if (truncated) notes.push('파일이 너무 많아 일부만 가져왔습니다. (최대 20,000개)');
+      if (notes.length > 0) void dialog.alert({ title: '조절', body: notes.join('\n') });
+    } catch (err) {
+      void dialog.alert({
+        title: '조절',
+        body: err instanceof Error ? err.message : '파일을 읽지 못했습니다.',
+      });
+    }
+  };
+
   const pickFiles = async () => {
     if (!native?.pickOpenFiles) return;
     const result = await native.pickOpenFiles({
@@ -136,6 +162,16 @@ export default function AdjustPage() {
     });
     if (result?.canceled || !result?.paths?.length) return;
     addPaths(result.paths.map((p) => ({ path: p, label: fileName(p) })));
+  };
+
+  const addFolder = async () => {
+    if (!native?.pickDirectory) return;
+    const picked = await native.pickDirectory({
+      memoryKey: 'adjustInput',
+      title: '영상·음원이 있는 폴더 선택',
+    });
+    if (picked?.canceled || !picked?.path) return;
+    await ingestPaths([picked.path]);
   };
 
   const removePath = (target) => {
@@ -232,6 +268,18 @@ export default function AdjustPage() {
     void native.showItemInFolder(outputPath);
   };
 
+  const running = batch?.state === 'queued' || batch?.state === 'running';
+  useReportJobRunning(featureId, running, '피치·볼륨 조절 중');
+  const progressFollowKey = batch
+    ? `${batch.state}:${batch.progress}:${batch.done}:${(batch.jobs ?? [])
+        .map((job) => `${job.id}:${job.state}:${job.progress}`)
+        .join('|')}`
+    : '';
+  const { sectionRef: progressSectionRef } = useJobProgressScroll({
+    active: Boolean(batch),
+    followKey: progressFollowKey,
+  });
+
   if (loading && !data) return <div className="p-6"><Loading /></div>;
   if (error) return <div className="p-6"><LoadError message={error} onRetry={reload} /></div>;
   if (!converter) {
@@ -242,11 +290,9 @@ export default function AdjustPage() {
     );
   }
 
-  const running = batch?.state === 'queued' || batch?.state === 'running';
-
   return (
-    <div className="h-full overflow-auto p-6">
-      <div className="mx-auto max-w-3xl space-y-5">
+    <div className="h-full overflow-auto py-6 pl-6 pr-20">
+      <div className="space-y-5">
         <section>
           <h1 className="m-0 text-xl font-semibold text-slate-900">영상(음원) 피치 & 볼륨 조절</h1>
           <p className="mt-1 text-sm text-slate-500">
@@ -260,45 +306,74 @@ export default function AdjustPage() {
             <Field
               group
               label="입력 파일"
-              hint={`지원: ${inputExts.join(', ')} · ${inputItems.length}개`}
+              hint={`지원: ${inputExts.join(', ')} · 폴더 추가 시 하위 폴더 ${includeSub ? '포함' : '제외'} · ${inputItems.length}개`}
             >
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className={btnClass}
-                  disabled={busy || running}
-                  onClick={() => void pickFiles()}
-                >
-                  파일 추가
-                </button>
-                {inputItems.length > 0 ? (
-                  <button type="button" className={btnClass} onClick={clearPaths}>
-                    목록 비우기
+              <InputDropZone
+                disabled={busy || running}
+                emptyHint="놓으면 목록에 추가됩니다"
+                onUnsupported={() =>
+                  void dialog.alert({
+                    title: '조절',
+                    body: '파일 끌어놓기를 쓰려면 앱을 다시 시작해 주세요. (파일·폴더 추가 버튼은 바로 사용할 수 있습니다)',
+                  })
+                }
+                onPaths={(paths) => void ingestPaths(paths)}
+              >
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className={btnClass}
+                    disabled={busy || running}
+                    onClick={() => void pickFiles()}
+                  >
+                    파일 추가
                   </button>
-                ) : null}
-              </div>
-              {inputItems.length > 0 ? (
-                <ul className="mt-3 max-h-48 space-y-1 overflow-auto rounded-md border border-slate-200 bg-slate-50 p-2 text-sm">
-                  {inputItems.map((item) => (
-                    <li key={item.key} className="flex items-center gap-2 rounded px-2 py-1 hover:bg-white">
-                      <span className="min-w-0 flex-1 truncate" title={item.path}>
-                        {item.label}
-                      </span>
-                      <button
-                        type="button"
-                        className="shrink-0 text-xs text-slate-500 hover:text-red-600"
-                        onClick={() => removePath(item.path)}
-                      >
-                        제거
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="mt-2 m-0 text-xs text-slate-400">
-                  영상 또는 음원을 하나 이상 추가해 주세요.
-                </p>
-              )}
+                  <button
+                    type="button"
+                    className={btnClass}
+                    disabled={busy || running}
+                    onClick={() => void addFolder()}
+                  >
+                    폴더 추가
+                  </button>
+                  {inputItems.length > 0 ? (
+                    <button type="button" className={btnClass} onClick={clearPaths}>
+                      목록 비우기
+                    </button>
+                  ) : null}
+                </div>
+                <div className="mt-2">
+                  <ToggleRow
+                    label="폴더 추가 시 하위 폴더 포함"
+                    hint="켜면 선택한 폴더 아래의 모든 하위 폴더에서도 파일을 모읍니다. 끌어다 놓기에도 적용됩니다."
+                    checked={includeSub}
+                    onChange={setIncludeSub}
+                    disabled={busy || running}
+                  />
+                </div>
+                {inputItems.length > 0 ? (
+                  <ul className="mt-3 max-h-48 space-y-1 overflow-auto rounded-md border border-slate-200 bg-slate-50 p-2 text-sm">
+                    {inputItems.map((item) => (
+                      <li key={item.key} className="flex items-center gap-2 rounded px-2 py-1 hover:bg-white">
+                        <span className="min-w-0 flex-1 truncate" title={item.path}>
+                          {item.label}
+                        </span>
+                        <button
+                          type="button"
+                          className="shrink-0 text-xs text-slate-500 hover:text-red-600"
+                          onClick={() => removePath(item.path)}
+                        >
+                          제거
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 m-0 text-xs text-slate-400">
+                    영상·음원을 추가하거나, 파일·폴더를 끌어다 놓으세요.
+                  </p>
+                )}
+              </InputDropZone>
             </Field>
 
             <Field
@@ -451,94 +526,96 @@ export default function AdjustPage() {
         </Section>
 
         {batch ? (
-          <Section title="진행 상태">
-            <div className="space-y-3 text-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge tone={batchTone(batch.state)}>
-                  {batch.state === 'done'
-                    ? '완료'
-                    : batch.state === 'error'
-                      ? '일부/전체 실패'
-                      : batch.state === 'cancelled'
-                        ? '취소됨'
-                        : `${Math.round((batch.progress || 0) * 100)}%`}
-                </Badge>
-                <span className="text-slate-500">
-                  {batch.done ?? 0}/{batch.total ?? batch.jobs?.length ?? 0} 완료
-                  {(batch.failed ?? 0) > 0 ? ` · 실패 ${batch.failed}` : ''}
-                  {(batch.cancelled ?? 0) > 0 ? ` · 취소 ${batch.cancelled}` : ''}
-                </span>
-                {running ? (
-                  <span className="ml-auto">
-                    <button
-                      type="button"
-                      className={btnDangerClass}
-                      disabled={stopping}
-                      onClick={() => void cancel()}
-                    >
-                      {stopping ? '중지 중…' : '전체 중지'}
-                    </button>
+          <div ref={progressSectionRef}>
+            <Section title="진행 상태">
+              <div className="space-y-3 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge tone={batchTone(batch.state)}>
+                    {batch.state === 'done'
+                      ? '완료'
+                      : batch.state === 'error'
+                        ? '일부/전체 실패'
+                        : batch.state === 'cancelled'
+                          ? '취소됨'
+                          : `${Math.round((batch.progress || 0) * 100)}%`}
+                  </Badge>
+                  <span className="text-slate-500">
+                    {batch.done ?? 0}/{batch.total ?? batch.jobs?.length ?? 0} 완료
+                    {(batch.failed ?? 0) > 0 ? ` · 실패 ${batch.failed}` : ''}
+                    {(batch.cancelled ?? 0) > 0 ? ` · 취소 ${batch.cancelled}` : ''}
                   </span>
-                ) : null}
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-slate-200">
-                <div
-                  className="h-full rounded-full bg-app-accent transition-[width] duration-300"
-                  style={{ width: `${Math.round((batch.progress || 0) * 100)}%` }}
-                />
-              </div>
+                  {running ? (
+                    <span className="ml-auto">
+                      <button
+                        type="button"
+                        className={btnDangerClass}
+                        disabled={stopping}
+                        onClick={() => void cancel()}
+                      >
+                        {stopping ? '중지 중…' : '전체 중지'}
+                      </button>
+                    </span>
+                  ) : null}
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+                  <div
+                    className="h-full rounded-full bg-app-accent transition-[width] duration-300"
+                    style={{ width: `${Math.round((batch.progress || 0) * 100)}%` }}
+                  />
+                </div>
 
-              <ul className="space-y-2">
-                {(batch.jobs ?? []).map((job) => (
-                  <li
-                    key={job.id}
-                    className="rounded-md border border-slate-200 bg-white px-3 py-2"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge tone={batchTone(job.state)}>{progressLabel(job)}</Badge>
-                      <span className="min-w-0 flex-1 truncate font-medium text-slate-800" title={job.inputPath}>
-                        {fileName(job.inputPath)}
-                      </span>
-                      {job.state === 'queued' || job.state === 'running' ? (
-                        <button
-                          type="button"
-                          className={btnDangerClass}
-                          disabled={stopping}
-                          onClick={() => void stopJobs(job.id)}
-                        >
-                          중지
-                        </button>
-                      ) : null}
-                      {job.state === 'done' && native?.showItemInFolder ? (
-                        <button
-                          type="button"
-                          className={btnClass}
-                          onClick={() => revealOutput(job.outputPath)}
-                        >
-                          보기
-                        </button>
-                      ) : null}
-                    </div>
-                    {job.state === 'running' || job.state === 'queued' ? (
-                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                        <div
-                          className="h-full rounded-full bg-app-accent/80 transition-[width] duration-300"
-                          style={{ width: `${Math.round((job.progress || 0) * 100)}%` }}
-                        />
+                <ul className="space-y-2">
+                  {(batch.jobs ?? []).map((job) => (
+                    <li
+                      key={job.id}
+                      className="rounded-md border border-slate-200 bg-white px-3 py-2"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge tone={batchTone(job.state)}>{progressLabel(job)}</Badge>
+                        <span className="min-w-0 flex-1 truncate font-medium text-slate-800" title={job.inputPath}>
+                          {fileName(job.inputPath)}
+                        </span>
+                        {job.state === 'queued' || job.state === 'running' ? (
+                          <button
+                            type="button"
+                            className={btnDangerClass}
+                            disabled={stopping}
+                            onClick={() => void stopJobs(job.id)}
+                          >
+                            중지
+                          </button>
+                        ) : null}
+                        {job.state === 'done' && native?.showItemInFolder ? (
+                          <button
+                            type="button"
+                            className={btnClass}
+                            onClick={() => revealOutput(job.outputPath)}
+                          >
+                            보기
+                          </button>
+                        ) : null}
                       </div>
-                    ) : null}
-                    {job.error ? (
-                      <p className="mt-1 m-0 text-xs text-red-600 whitespace-pre-wrap">{job.error}</p>
-                    ) : job.state === 'done' ? (
-                      <p className="mt-1 m-0 break-all text-xs text-slate-500">
-                        <code className={codeClass}>{job.outputPath}</code>
-                      </p>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </Section>
+                      {job.state === 'running' || job.state === 'queued' ? (
+                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                          <div
+                            className="h-full rounded-full bg-app-accent/80 transition-[width] duration-300"
+                            style={{ width: `${Math.round((job.progress || 0) * 100)}%` }}
+                          />
+                        </div>
+                      ) : null}
+                      {job.error ? (
+                        <p className="mt-1 m-0 text-xs text-red-600 whitespace-pre-wrap">{job.error}</p>
+                      ) : job.state === 'done' ? (
+                        <p className="mt-1 m-0 break-all text-xs text-slate-500">
+                          <code className={codeClass}>{job.outputPath}</code>
+                        </p>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </Section>
+          </div>
         ) : null}
       </div>
     </div>

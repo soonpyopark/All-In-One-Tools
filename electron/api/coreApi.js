@@ -15,6 +15,7 @@ import {
   rememberFolder,
   updateSettings,
 } from '../settingsService.js';
+import { setCloseToTrayEnabled } from '../trayService.js';
 import { fetchLatestRelease } from '../updateService.js';
 import { defineApi } from './registry.js';
 
@@ -62,12 +63,14 @@ export function registerCoreApi() {
     const patch = {};
     if ('accentColor' in body) patch.accentColor = normalizeAccentColor(body.accentColor);
     if ('startupUpdateCheck' in body) patch.startupUpdateCheck = Boolean(body.startupUpdateCheck);
+    if ('closeToTray' in body) patch.closeToTray = Boolean(body.closeToTray);
     if ('ffmpegDir' in body) patch.ffmpegDir = typeof body.ffmpegDir === 'string' ? body.ffmpegDir.trim() : '';
     if ('exportDir' in body) patch.exportDir = typeof body.exportDir === 'string' ? body.exportDir.trim() : '';
     if ('autoLaunch' in body && runtime.autoLaunch?.supported) {
       runtime.autoLaunch.set(Boolean(body.autoLaunch));
     }
-    await updateSettings(patch);
+    const next = await updateSettings(patch);
+    if ('closeToTray' in patch) setCloseToTrayEnabled(Boolean(next.closeToTray));
     return settingsPayload();
   });
 }

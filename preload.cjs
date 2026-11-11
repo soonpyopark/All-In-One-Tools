@@ -1,4 +1,4 @@
-const { contextBridge, ipcRenderer } = require('electron');
+const { contextBridge, ipcRenderer, webUtils } = require('electron');
 
 /**
  * Bridge between the window and the main process. There is no network port:
@@ -14,4 +14,12 @@ contextBridge.exposeInMainWorld('frame', {
   pickDirectory: (options) => ipcRenderer.invoke('frame:pickDirectory', options),
   pickOpenFiles: (options) => ipcRenderer.invoke('frame:pickOpenFiles', options),
   showItemInFolder: (targetPath) => ipcRenderer.invoke('frame:showItemInFolder', targetPath),
+  /** 끌어다 놓은 File 객체의 실제 경로 (파일 끌어놓기용). */
+  getPathForFile: (file) => {
+    try {
+      return webUtils.getPathForFile(file);
+    } catch {
+      return '';
+    }
+  },
 });

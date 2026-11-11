@@ -1,6 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { api, getNative } from '../../lib/apiClient.js';
 import { useDialog } from '../../context/DialogContext.jsx';
+import { useReportJobRunning } from '../../context/JobActivityContext.jsx';
+import { useJobProgressScroll } from '../../hooks/useJobProgressScroll.js';
 import { eventToAccelerator } from '../../../shared/keys.js';
 import {
   Badge,
@@ -75,6 +77,60 @@ function HotkeyInput({ value, onChange, label }) {
       <span className={capturing ? 'text-app-accent' : ''}>{capturing ? '키를 누르세요…' : value}</span>
       <span className="font-sans text-xs text-slate-400">{capturing ? 'Esc 취소' : '클릭해서 변경'}</span>
     </button>
+  );
+}
+
+/**
+ * 프리셋 이름 바꾸기 팝업. Enter 로 확인, Esc 로 취소합니다.
+ *
+ * @param {{ initialName: string, onSubmit: (name: string) => void, onClose: () => void }} props
+ */
+function RenameDialog({ initialName, onSubmit, onClose }) {
+  const [name, setName] = useState(initialName);
+  const inputRef = useRef(/** @type {HTMLInputElement | null} */ (null));
+  const trimmed = name.trim();
+
+  useEffect(() => {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+  }, []);
+
+  const submit = () => {
+    if (trimmed) onSubmit(trimmed);
+  };
+
+  return (
+    <div className="fixed inset-0 z-[1000] flex items-center justify-center bg-[rgba(32,33,36,0.4)] p-4" role="presentation">
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="프리셋 이름 바꾸기"
+        className="w-full max-w-sm rounded-xl bg-white p-6 shadow-xl"
+        onKeyDown={(event) => {
+          if (event.key === 'Escape') onClose();
+        }}
+      >
+        <h2 className="m-0 text-base font-semibold text-slate-900">프리셋 이름 바꾸기</h2>
+        <input
+          ref={inputRef}
+          className={`${inputClass} mt-4`}
+          value={name}
+          maxLength={60}
+          onChange={(event) => setName(event.target.value)}
+          onKeyDown={(event) => {
+            if (event.key === 'Enter') {
+              event.preventDefault();
+              submit();
+            }
+          }}
+          aria-label="새 이름"
+        />
+        <div className="mt-5 flex justify-end gap-2">
+          <button type="button" className={btnClass} onClick={onClose}>취소</button>
+          <button type="button" className={btnPrimaryClass} disabled={!trimmed} onClick={submit}>확인</button>
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -177,7 +233,7 @@ function runTone(state) {
 const RUN_LABELS = { running: '실행 중', done: '완료', stopped: '중지됨', error: '오류' };
 
 /** 매크로 화면 캡처: 화면/창/영역 캡처 + 키보드·마우스 매크로 프리셋. */
-export default function CapturePage() {
+export default function CapturePage({ featureId } = {}) {
   const dialog = useDialog();
   const native = getNative();
 
@@ -198,8 +254,18 @@ export default function CapturePage() {
   const [snapBusy, setSnapBusy] = useState(false);
   const [snapResult, setSnapResult] = useState(/** @type {{ path: string, width: number, height: number } | null} */ (null));
   const [snapDirLoaded, setSnapDirLoaded] = useState(false);
+  const [renaming, setRenaming] = useState(false);
 
   const running = status.run?.state === 'running';
+  useReportJobRunning(featureId, running, '매크로 캡처 중');
+  const run = status.run;
+  const progressFollowKey = run
+    ? `${run.state}:${run.logs?.length ?? 0}:${run.captures ?? 0}:${run.stepIndex ?? 0}:${run.note ?? ''}`
+    : '';
+  const { sectionRef: progressSectionRef, logRef: progressLogRef } = useJobProgressScroll({
+    active: Boolean(run),
+    followKey: progressFollowKey,
+  });
   const dirty = draft ? snapshot(draft) !== savedJson : false;
   const isArmed = Boolean(draft && status.armed?.presetId === draft.id);
 
@@ -292,6 +358,29 @@ export default function CapturePage() {
     setSelectedId(preset.id);
     setDraft(preset);
     setSavedJson(''); // 아직 저장 전
+  };
+
+  /**
+   * 프리셋 이름만 바꿉니다. 저장된 프리셋이면 이름만 바로 저장하고, 편집 중인 다른 변경은
+   * 저장하지 않은 채로 남겨 둡니다. 아직 저장 전인 새 매크로는 편집 중 이름만 바꿉니다.
+   */
+  const renamePreset = async (nextName) => {
+    setRenaming(false);
+    if (!draft || nextName === draft.name) return;
+    const stored = presets.find((p) => p.id === draft.id);
+    if (!stored) {
+      patchDraft({ name: nextName });
+      return;
+    }
+    try {
+      const res = await api('capture.presets.save', { preset: { ...stored, name: nextName } });
+      setPresets(res.presets);
+      setDraft((current) => (current ? { ...current, name: res.preset.name } : current));
+      setSavedJson(snapshot(res.preset));
+      if (res.rearmError) showError(`이름은 바꿨지만 단축키를 다시 등록하지 못했습니다.\n${res.rearmError}`);
+    } catch (err) {
+      showError(toMessage(err, '이름을 바꾸지 못했습니다.'));
+    }
   };
 
   const duplicatePreset = async () => {
@@ -423,7 +512,6 @@ export default function CapturePage() {
 
   const openFolder = (target) => void native?.showItemInFolder?.(target);
 
-  const run = status.run;
   const progressText = useMemo(() => {
     if (!run) return '';
     const total = run.repeat === 0 ? '∞' : run.repeat;
@@ -546,6 +634,7 @@ export default function CapturePage() {
             </button>
             <MoreMenu
               items={[
+                { label: '이름 바꾸기', onClick: () => setRenaming(true) },
                 { label: '복제', onClick: () => void duplicatePreset(), disabled: !canReorder },
                 { label: '위로 이동', onClick: () => void movePreset(-1), disabled: !canReorder },
                 { label: '아래로 이동', onClick: () => void movePreset(1), disabled: !canReorder },
@@ -555,6 +644,10 @@ export default function CapturePage() {
           </>
         ) : null}
       </div>
+
+      {renaming && draft ? (
+        <RenameDialog initialName={draft.name} onSubmit={(name) => void renamePreset(name)} onClose={() => setRenaming(false)} />
+      ) : null}
 
       {!draft ? (
         <div className="flex flex-col items-center gap-3 rounded-lg border border-dashed border-slate-300 bg-white p-10 text-center">
@@ -566,7 +659,7 @@ export default function CapturePage() {
       ) : (
         <>
           {/* 실행 */}
-          <section className="rounded-lg border border-slate-200 bg-white p-4">
+          <section ref={progressSectionRef} className="rounded-lg border border-slate-200 bg-white p-4">
             <div className="flex flex-wrap items-center gap-3">
               <label className="flex items-center gap-2 text-sm text-slate-600" title="저장 폴더 안의 이미지 파일 수(기존 파일 포함)가 이 수에 도달하면 끝납니다. 0 이면 중지할 때까지 계속합니다.">
                 <span className="whitespace-nowrap">목표 이미지 수</span>
@@ -610,9 +703,12 @@ export default function CapturePage() {
             {run?.error ? <p className="mb-0 mt-3 whitespace-pre-wrap text-sm text-red-600">{run.error}</p> : null}
             {status.hotkeyError ? <p className="mb-0 mt-3 text-sm text-red-600">{status.hotkeyError}</p> : null}
             {run && run.logs.length > 0 ? (
-              <details className="mt-3 text-xs text-slate-500">
+              <details className="mt-3 text-xs text-slate-500" open={running ? true : undefined}>
                 <summary className="cursor-pointer select-none">실행 기록 ({run.logs.length})</summary>
-                <ul className="m-0 mt-1 max-h-32 list-none overflow-auto p-0 font-mono">
+                <ul
+                  ref={progressLogRef}
+                  className="m-0 mt-1 max-h-32 list-none overflow-auto p-0 font-mono"
+                >
                   {run.logs.map((line, index) => (
                     <li key={index}>{line}</li>
                   ))}
@@ -748,8 +844,8 @@ export default function CapturePage() {
   );
 
   return (
-    <div className="h-full overflow-auto p-6">
-      <div className="mx-auto max-w-4xl space-y-5">
+    <div className="h-full overflow-auto py-6 pl-6 pr-20">
+      <div className="space-y-5">
         <section>
           <h1 className="m-0 text-xl font-semibold text-slate-900">매크로 화면 캡처</h1>
           <p className="mt-1 text-sm text-slate-500">

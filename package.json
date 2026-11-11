@@ -11,7 +11,8 @@
     "dev:stop": "node scripts/dev-process.mjs stop",
     "dev:restart": "node scripts/dev-process.mjs restart",
     "prepare:icons": "node scripts/prepare-icons.mjs",
-    "build": "npm run prepare:icons && vite build",
+    "prepare:ocr": "node scripts/ensure-ocr-models.mjs",
+    "build": "npm run prepare:icons && npm run prepare:ocr && vite build",
     "build:release": "node scripts/build-release.mjs",
     "build:release:mac": "node scripts/build-release-mac.mjs",
     "update:all": "node scripts/update-all.mjs",
@@ -26,21 +27,26 @@
     "frame",
     "boilerplate"
   ],
-  "license": "UNLICENSED",
+  "license": "AGPL-3.0",
   "devDependencies": {
     "@tailwindcss/postcss": "^4.3.5",
     "@vitejs/plugin-react": "^6.3.0",
-    "electron": "^44.10.0",
+    "electron": "^45.3.0",
     "electron-builder": "^26.18.0",
     "png-to-ico": "^3.0.2",
     "postcss": "^8.5.32",
     "rcedit": "^5.0.2",
     "tailwindcss": "^4.3.5",
-    "vite": "^8.3.7"
+    "vite": "^8.3.8"
   },
   "dependencies": {
     "@napi-rs/canvas": "^1.1.0",
+    "@nuintun/qrcode": "^5.1.0",
     "@nut-tree-fork/nut-js": "^4.2.6",
+    "fflate": "^0.8.3",
+    "jsqr": "^1.4.0",
+    "mupdf": "^1.28.6",
+    "onnxruntime-node": "^1.31.1",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^6.5.438",
     "react": "^19.3.1",
@@ -67,7 +73,8 @@
       "node_modules/sharp/**/*",
       "node_modules/@img/**/*",
       "node_modules/@napi-rs/**/*",
-      "node_modules/@nut-tree-fork/**/*"
+      "node_modules/@nut-tree-fork/**/*",
+      "node_modules/onnxruntime-node/**/*"
     ],
     "extraResources": [
       {
@@ -77,6 +84,13 @@
       {
         "from": "build/icon.ico",
         "to": "icon.ico"
+      },
+      {
+        "from": "ocr/models",
+        "to": "ocr/models",
+        "filter": [
+          "**/*"
+        ]
       }
     ],
     "win": {
@@ -100,5 +114,9 @@
         }
       ]
     }
+  },
+  "allowScripts": {
+    "onnxruntime-node@1.23.2": true,
+    "electron@45.3.0": true
   }
 }

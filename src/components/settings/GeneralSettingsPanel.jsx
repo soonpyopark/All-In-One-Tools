@@ -113,6 +113,12 @@ export default function GeneralSettingsPanel() {
             onChange={(checked) => void save({ startupUpdateCheck: checked })}
           />
           <ToggleRow
+            label="닫으면 트레이로 보내기"
+            hint="창을 닫아도 종료하지 않고 트레이에 남겨 둡니다. 다시 실행하면 새 창 대신 숨겨 둔 창을 다시 엽니다."
+            checked={Boolean(settings.closeToTray)}
+            onChange={(checked) => void save({ closeToTray: checked })}
+          />
+          <ToggleRow
             label="Windows / macOS 로그인 시 자동 실행"
             hint={
               settings.autoLaunchSupported

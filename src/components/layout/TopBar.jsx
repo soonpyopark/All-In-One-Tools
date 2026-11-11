@@ -32,7 +32,7 @@ function UpdateCheckIcon() {
 }
 
 /**
- * Top bar. Right side, left → right:  [환경설정 ⚙]  [업데이트 확인 ⟳]
+ * Top bar. Right side, left → right:  [업데이트 확인 ⟳]  [환경설정 ⚙]
  *
  * @param {{ settingsOpen: boolean, onToggleSettings: () => void }} props
  */
@@ -72,17 +72,6 @@ export default function TopBar({ settingsOpen, onToggleSettings }) {
         <div className="flex shrink-0 items-center justify-end gap-2">
           <button
             type="button"
-            className={settingsOpen ? iconBtnActiveClass : iconBtnClass}
-            aria-label={settingsOpen ? '환경설정 닫기' : '환경설정'}
-            title={settingsOpen ? '환경설정 닫기' : '환경설정'}
-            aria-pressed={settingsOpen}
-            onClick={onToggleSettings}
-          >
-            <SettingsIcon />
-          </button>
-
-          <button
-            type="button"
             className={iconBtnClass}
             aria-label="업데이트 확인"
             title="업데이트 확인"
@@ -90,6 +79,17 @@ export default function TopBar({ settingsOpen, onToggleSettings }) {
             onClick={handleUpdateCheck}
           >
             <UpdateCheckIcon />
+          </button>
+
+          <button
+            type="button"
+            className={settingsOpen ? iconBtnActiveClass : iconBtnClass}
+            aria-label={settingsOpen ? '환경설정 닫기' : '환경설정'}
+            title={settingsOpen ? '환경설정 닫기' : '환경설정'}
+            aria-pressed={settingsOpen}
+            onClick={onToggleSettings}
+          >
+            <SettingsIcon />
           </button>
         </div>
       </div>

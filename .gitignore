@@ -15,3 +15,8 @@ data/
 .DS_Store
 Thumbs.db
 .cache/
+
+# OCR ONNX 모델 (npm run prepare:ocr 로 받음)
+ocr/models/*.onnx
+ocr/models/*.yml
+ocr/models/*.part

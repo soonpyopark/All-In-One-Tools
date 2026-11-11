@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import { gifHoldFilter, normalizeHoldSeconds } from '../../shared/gifHold.js';
 import { parseFfmpegTimeSeconds, probeMediaFile, runFfmpeg } from '../ffmpegService.js';
 
 const INPUT_EXTS = ['.gif'];
@@ -24,6 +25,9 @@ export function normalizeOptions(raw = {}) {
   return {
     fps: clampNumber(src.fps, 1, 60, 10),
     speed: clampNumber(src.speed, 0.1, 8, 1),
+    // 켜면 첫 GIF 의 첫 프레임과 마지막 GIF 의 마지막 프레임을 각각 holdSec 초씩 붙잡아 둡니다.
+    holdEnds: src.holdEnds === true,
+    holdSec: normalizeHoldSeconds(src.holdSec),
   };
 }
 
@@ -33,8 +37,9 @@ export function normalizeOptions(raw = {}) {
  * @param {number} maxH
  * @param {number} speed
  * @param {number} fps
+ * @param {number | null} holdSec 첫·마지막 프레임을 늘릴 시간(초). 늘리지 않으면 null
  */
-function buildFilterComplex(n, maxW, maxH, speed, fps) {
+function buildFilterComplex(n, maxW, maxH, speed, fps, holdSec) {
   /** @type {string[]} */
   const parts = [];
   for (let i = 0; i < n; i += 1) {
@@ -46,7 +51,7 @@ function buildFilterComplex(n, maxW, maxH, speed, fps) {
   }
   const ins = Array.from({ length: n }, (_, i) => `[v${i}]`).join('');
   parts.push(`${ins}concat=n=${n}:v=1[vcat]`);
-  parts.push(`[vcat]fps=fps=${fps}:round=up[vfps]`);
+  parts.push(`[vcat]${holdSec ? `${gifHoldFilter(holdSec)},` : ''}fps=fps=${fps}:round=up[vfps]`);
   parts.push('[vfps]split[s0][s1];[s0]palettegen=stats_mode=diff[p];[s1][p]paletteuse[out]');
   return parts.join(';');
 }
@@ -97,8 +102,9 @@ export const mergeGifs = {
 
     const maxW = Math.max(...widths);
     const maxH = Math.max(...heights);
-    const filterComplex = buildFilterComplex(paths.length, maxW, maxH, opts.speed, opts.fps);
-    const estimated = totalDuration > 0 ? totalDuration / opts.speed : null;
+    const filterComplex = buildFilterComplex(paths.length, maxW, maxH, opts.speed, opts.fps, opts.holdEnds ? opts.holdSec : null);
+    const holdExtra = opts.holdEnds ? opts.holdSec * 2 : 0;
+    const estimated = totalDuration > 0 ? totalDuration / opts.speed + holdExtra : null;
 
     fs.mkdirSync(path.dirname(outputPath), { recursive: true });
     onProgress?.(0.02);

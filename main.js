@@ -2,14 +2,25 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { APP_NAME } from './shared/constants.js';
+import { APP_NAME, APP_USER_MODEL_ID } from './shared/constants.js';
 import { ApiError, dispatchApi } from './electron/api/registry.js';
 import { registerCoreApi } from './electron/api/coreApi.js';
 import { setAppContext } from './electron/context.js';
 import { startDevRenderer } from './electron/devRenderer.js';
 import { registerModules } from './electron/modules/index.js';
 import { runtime } from './electron/runtime.js';
-import { getRememberedFolder, rememberFolder } from './electron/settingsService.js';
+import { getRememberedFolder, getSettings, rememberFolder } from './electron/settingsService.js';
+import {
+  acquireSingleInstanceLockIfNeeded,
+  bindSecondInstanceHandler,
+  disposeTrayOnQuit,
+  initTrayService,
+  markQuitting,
+  onAppReadyForTray,
+  shouldHideInsteadOfClose,
+  shouldQuitOnAllWindowsClosed,
+  showMainWindow,
+} from './electron/trayService.js';
 import { hideTitleBarIcon } from './electron/windowIcon.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -18,6 +29,11 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 for (const stream of [process.stdout, process.stderr]) stream?.on?.('error', () => undefined);
 
 const isDev = !app.isPackaged;
+
+// 작업표시줄·바로가기 아이콘이 재부팅 후 기본 아이콘으로 풀리지 않도록 고정 ID 를 먼저 건다.
+if (process.platform === 'win32') {
+  app.setAppUserModelId(APP_USER_MODEL_ID);
+}
 
 /* -------------------------------------------------------------------------- */
 /* state folder                                                               */
@@ -59,9 +75,6 @@ const storage = resolveStorage();
 /* startup                                                                    */
 /* -------------------------------------------------------------------------- */
 
-// No single-instance lock on purpose: the program can be started again while
-// it is running, and every instance is an independent window.
-
 /** @type {BrowserWindow | null} */
 let mainWindow = null;
 /** Folder the window loads its UI from (dist/ or the dev watch build). */
@@ -69,7 +82,35 @@ let rendererDir = '';
 /** @type {{ close: () => Promise<void> } | null} */
 let devRenderer = null;
 
-app.whenReady().then(boot).catch(fatal);
+rendererDir = isDev ? path.join(__dirname, '.dev-dist') : path.join(__dirname, 'dist');
+fs.mkdirSync(storage.stateRoot, { recursive: true });
+setAppContext({
+  isDev,
+  projectRoot: __dirname,
+  distDir: rendererDir,
+  stateRoot: storage.stateRoot,
+  portable: storage.portable,
+});
+runtime.isDev = isDev;
+runtime.stateRoot = storage.stateRoot;
+runtime.portable = storage.portable;
+
+initTrayService({
+  enabled: getSettings().closeToTray === true,
+  resolveIconPath,
+  getMainWindow: () => mainWindow,
+  ensureMainWindow: () => {
+    if (!mainWindow || mainWindow.isDestroyed()) createMainWindow();
+  },
+});
+
+// 「닫으면 트레이로 보내기」가 켜져 있을 때만 단일 인스턴스. 끄면 여러 창을 동시에 띄울 수 있다.
+if (!acquireSingleInstanceLockIfNeeded()) {
+  app.quit();
+} else {
+  bindSecondInstanceHandler();
+  app.whenReady().then(boot).catch(fatal);
+}
 
 /** @param {unknown} error */
 function fatal(error) {
@@ -80,20 +121,8 @@ function fatal(error) {
 }
 
 async function boot() {
-  fs.mkdirSync(storage.stateRoot, { recursive: true });
+  onAppReadyForTray();
 
-  rendererDir = isDev ? path.join(__dirname, '.dev-dist') : path.join(__dirname, 'dist');
-
-  setAppContext({
-    isDev,
-    projectRoot: __dirname,
-    distDir: rendererDir,
-    stateRoot: storage.stateRoot,
-    portable: storage.portable,
-  });
-  runtime.isDev = isDev;
-  runtime.stateRoot = storage.stateRoot;
-  runtime.portable = storage.portable;
   runtime.autoLaunch = {
     supported: !isDev,
     get: () => app.getLoginItemSettings().openAtLogin,
@@ -120,7 +149,7 @@ async function boot() {
   createMainWindow();
 
   app.on('activate', () => {
-    if (BrowserWindow.getAllWindows().length === 0) createMainWindow();
+    showMainWindow();
   });
 }
 
@@ -130,7 +159,9 @@ async function boot() {
 
 function resolveIconPath() {
   const candidates = [
+    path.join(__dirname, 'build', 'icon.ico'),
     path.join(__dirname, 'build', 'icon.png'),
+    path.join(process.resourcesPath ?? '', 'icon.ico'),
     path.join(process.resourcesPath ?? '', 'icon.png'),
   ];
   return candidates.find((candidate) => fs.existsSync(candidate));
@@ -209,6 +240,12 @@ function createMainWindow() {
       event.preventDefault();
     } else if (isDev && (input.key === 'F12' || (ctrl && input.shift && input.key.toLowerCase() === 'i'))) {
       win.webContents.toggleDevTools();
+      event.preventDefault();
+    }
+  });
+
+  win.on('close', (event) => {
+    if (shouldHideInsteadOfClose(win)) {
       event.preventDefault();
     }
   });
@@ -343,11 +380,13 @@ function registerIpc() {
 /* shutdown                                                                   */
 /* -------------------------------------------------------------------------- */
 
-// Closing the window quits this instance (other running instances are unaffected).
 app.on('window-all-closed', () => {
+  if (!shouldQuitOnAllWindowsClosed()) return;
   app.quit();
 });
 
 app.on('before-quit', () => {
+  markQuitting();
+  disposeTrayOnQuit();
   void devRenderer?.close().catch(() => undefined);
 });

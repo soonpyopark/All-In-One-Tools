@@ -2,7 +2,7 @@ import { spawnSync } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { APP_FILE_NAME, APP_NAME, APP_VERSION } from '../shared/constants.js';
+import { APP_FILE_NAME, APP_NAME, APP_USER_MODEL_ID, APP_VERSION } from '../shared/constants.js';
 import { formatBuildTimestamp, writeBuildStamp } from './sync-build-stamp.mjs';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -15,7 +15,7 @@ export const RELEASE_DIR = path.join(projectRoot, 'release');
 /** electron-builder unpack output (intermediate). */
 export const STAGING_DIR = path.join(projectRoot, '.dist-build');
 
-export { APP_FILE_NAME, APP_NAME, APP_VERSION, formatBuildTimestamp };
+export { APP_FILE_NAME, APP_NAME, APP_USER_MODEL_ID, APP_VERSION, formatBuildTimestamp };
 
 /**
  * Artifact name suffix: `_YYMMDD_HHMMSS_<arch>` (e.g. `_261029_153000_arm64`).

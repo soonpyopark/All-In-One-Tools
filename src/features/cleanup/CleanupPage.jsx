@@ -1,6 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
+import InputDropZone from '../../components/common/InputDropZone.jsx';
 import { api, getNative } from '../../lib/apiClient.js';
 import { useDialog } from '../../context/DialogContext.jsx';
+import { useReportJobRunning } from '../../context/JobActivityContext.jsx';
+import { useJobProgressScroll } from '../../hooks/useJobProgressScroll.js';
 import { useLoad } from '../../hooks/useLoad.js';
 import RegionPreview from './RegionPreview.jsx';
 import {
@@ -40,9 +43,9 @@ function batchTone(state) {
  *  - `ebook-extract` : 이미지 자르기 & PDF 저장 (스크린샷에서 이북 영역 등을 추출)
  *  - `pdf-dedup`     : PDF 중복페이지 정리
  *
- * @param {{ tool?: 'ebook-extract' | 'pdf-dedup' }} props
+ * @param {{ tool?: 'ebook-extract' | 'pdf-dedup', featureId?: string }} props
  */
-export default function CleanupPage({ tool = 'ebook-extract' }) {
+export default function CleanupPage({ tool = 'ebook-extract', featureId } = {}) {
   const dialog = useDialog();
   const native = getNative();
   const { data, loading, error, reload } = useLoad(() => api('cleanup.tools'));
@@ -71,6 +74,7 @@ export default function CleanupPage({ tool = 'ebook-extract' }) {
   const [job, setJob] = useState(/** @type {any} */ (null));
   const [busy, setBusy] = useState(false);
   const [stopping, setStopping] = useState(false);
+  const [includeSub, setIncludeSub] = useState(false);
 
   // Output folder: restored from the last run, and saved again whenever it changes.
   const [outputDirLoaded, setOutputDirLoaded] = useState(false);
@@ -158,6 +162,30 @@ export default function CleanupPage({ tool = 'ebook-extract' }) {
     });
   };
 
+  const ingestPaths = async (paths) => {
+    if (!paths?.length || !selected) return;
+    try {
+      const { files, skipped, truncated } = await api('files.inspect', {
+        paths,
+        recursive: includeSub,
+        exts: selected.inputExts,
+      });
+      addPaths(files.map((file) => ({ path: file.path, label: file.name })));
+      const notes = [];
+      if (files.length === 0) {
+        notes.push(`추가할 파일이 없습니다. (지원: ${selected.inputExts.join(', ')})`);
+      }
+      if (skipped > 0) notes.push(`지원하지 않는 항목 ${skipped}개는 제외했습니다.`);
+      if (truncated) notes.push('파일이 너무 많아 일부만 가져왔습니다. (최대 20,000개)');
+      if (notes.length > 0) void dialog.alert({ title: pageTitle, body: notes.join('\n') });
+    } catch (err) {
+      void dialog.alert({
+        title: pageTitle,
+        body: err instanceof Error ? err.message : '파일을 읽지 못했습니다.',
+      });
+    }
+  };
+
   const pickFiles = async () => {
     if (!native?.pickOpenFiles || !selected) return;
     const result = await native.pickOpenFiles({
@@ -177,27 +205,12 @@ export default function CleanupPage({ tool = 'ebook-extract' }) {
 
   const addFolder = async () => {
     if (!native?.pickDirectory || !selected) return;
-    const picked = await native.pickDirectory({ memoryKey: isEbook ? 'ebookInput' : 'pdfInput' });
+    const picked = await native.pickDirectory({
+      memoryKey: isEbook ? 'ebookInput' : 'pdfInput',
+      title: isEbook ? '이미지가 있는 폴더 선택' : 'PDF 가 있는 폴더 선택',
+    });
     if (picked?.canceled || !picked?.path) return;
-    try {
-      const { files, dir } = await api('cleanup.listFolder', {
-        dirPath: picked.path,
-        exts: selected.inputExts,
-      });
-      if (files.length === 0) {
-        void dialog.alert({
-          title: pageTitle,
-          body: `폴더에 지원하는 파일이 없습니다. (${selected.inputExts.join(', ')})\n${dir}`,
-        });
-        return;
-      }
-      addPaths(files.map((p) => ({ path: p, label: fileName(p) })));
-    } catch (err) {
-      void dialog.alert({
-        title: pageTitle,
-        body: err instanceof Error ? err.message : '폴더를 읽지 못했습니다.',
-      });
-    }
+    await ingestPaths([picked.path]);
   };
 
   const removePath = (target) => {
@@ -348,15 +361,28 @@ export default function CleanupPage({ tool = 'ebook-extract' }) {
     }
   };
 
+  const running = job?.state === 'queued' || job?.state === 'running';
+  useReportJobRunning(
+    featureId,
+    running,
+    tool === 'pdf-dedup' ? 'PDF 정리 중' : '이미지 정리 중',
+  );
+  const progressFollowKey = job
+    ? `${job.state}:${job.progress}:${Array.isArray(job.logs) ? job.logs.length : 0}:${Array.isArray(job.result?.items) ? job.result.items.length : 0}`
+    : '';
+  const { sectionRef: progressSectionRef, logRef: progressLogRef } = useJobProgressScroll({
+    active: Boolean(job),
+    followKey: progressFollowKey,
+  });
+
   if (loading && !data) return <div className="p-6"><Loading /></div>;
   if (error) return <div className="p-6"><LoadError message={error} onRetry={reload} /></div>;
 
-  const running = job?.state === 'queued' || job?.state === 'running';
   const pdfItems = job?.result?.kind === 'pdf-dedup' ? job.result.items ?? [] : [];
 
   return (
-    <div className="h-full overflow-auto p-6">
-      <div className="mx-auto max-w-3xl space-y-5">
+    <div className="h-full overflow-auto py-6 pl-6 pr-20">
+      <div className="space-y-5">
         <section>
           <h1 className="m-0 text-xl font-semibold text-slate-900">{pageTitle}</h1>
           <p className="mt-1 text-sm text-slate-500">
@@ -374,76 +400,99 @@ export default function CleanupPage({ tool = 'ebook-extract' }) {
               label="입력 파일"
               hint={
                 selected
-                  ? `지원: ${selected.inputExts.join(', ')} · 폴더 추가는 폴더 안 파일만(하위 폴더 제외) · ${inputItems.length}개`
+                  ? `지원: ${selected.inputExts.join(', ')} · 폴더 추가 시 하위 폴더 ${includeSub ? '포함' : '제외'} · ${inputItems.length}개`
                   : undefined
               }
             >
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className={btnClass}
-                  disabled={busy || running}
-                  onClick={() => void pickFiles()}
-                >
-                  파일 추가
-                </button>
-                <button
-                  type="button"
-                  className={btnClass}
-                  disabled={busy || running}
-                  onClick={() => void addFolder()}
-                >
-                  폴더 추가
-                </button>
-                {inputItems.length > 0 ? (
-                  <button type="button" className={btnClass} onClick={clearPaths}>
-                    목록 비우기
+              <InputDropZone
+                disabled={busy || running || !selected}
+                emptyHint="놓으면 목록에 추가됩니다"
+                onUnsupported={() =>
+                  void dialog.alert({
+                    title: pageTitle,
+                    body: '파일 끌어놓기를 쓰려면 앱을 다시 시작해 주세요. (파일·폴더 추가 버튼은 바로 사용할 수 있습니다)',
+                  })
+                }
+                onPaths={(paths) => void ingestPaths(paths)}
+              >
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className={btnClass}
+                    disabled={busy || running}
+                    onClick={() => void pickFiles()}
+                  >
+                    파일 추가
                   </button>
-                ) : null}
-              </div>
-              {inputItems.length > 0 ? (
-                <ul className="mt-3 max-h-48 space-y-1 overflow-auto rounded-md border border-slate-200 bg-slate-50 p-2 text-sm">
-                  {inputItems.map((item, index) => (
-                    <li key={item.key} className="flex items-center gap-2 rounded px-2 py-1 hover:bg-white">
-                      {isEbook ? <span className="w-5 shrink-0 text-xs text-slate-400">{index + 1}</span> : null}
-                      <span className="min-w-0 flex-1 truncate" title={item.path}>
-                        {item.label}
-                      </span>
-                      {isEbook ? (
-                        <>
-                          <button
-                            type="button"
-                            className="shrink-0 text-xs text-slate-500 hover:text-slate-800"
-                            disabled={index === 0}
-                            onClick={() => movePath(item.path, -1)}
-                          >
-                            위로
-                          </button>
-                          <button
-                            type="button"
-                            className="shrink-0 text-xs text-slate-500 hover:text-slate-800"
-                            disabled={index === inputItems.length - 1}
-                            onClick={() => movePath(item.path, 1)}
-                          >
-                            아래로
-                          </button>
-                        </>
-                      ) : null}
-                      <button
-                        type="button"
-                        className="shrink-0 text-xs text-slate-500 hover:text-red-600"
-                        onClick={() => removePath(item.path)}
-                      >
-                        제거
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="mt-2 m-0 text-xs text-slate-400">
-                  {isEbook ? '스크린샷 이미지를 추가해 주세요.' : 'PDF 파일을 추가해 주세요.'}
-                </p>
-              )}
+                  <button
+                    type="button"
+                    className={btnClass}
+                    disabled={busy || running}
+                    onClick={() => void addFolder()}
+                  >
+                    폴더 추가
+                  </button>
+                  {inputItems.length > 0 ? (
+                    <button type="button" className={btnClass} onClick={clearPaths}>
+                      목록 비우기
+                    </button>
+                  ) : null}
+                </div>
+                <div className="mt-2">
+                  <ToggleRow
+                    label="폴더 추가 시 하위 폴더 포함"
+                    hint="켜면 선택한 폴더 아래의 모든 하위 폴더에서도 파일을 모읍니다. 끌어다 놓기에도 적용됩니다."
+                    checked={includeSub}
+                    onChange={setIncludeSub}
+                    disabled={busy || running}
+                  />
+                </div>
+                {inputItems.length > 0 ? (
+                  <ul className="mt-3 max-h-48 space-y-1 overflow-auto rounded-md border border-slate-200 bg-slate-50 p-2 text-sm">
+                    {inputItems.map((item, index) => (
+                      <li key={item.key} className="flex items-center gap-2 rounded px-2 py-1 hover:bg-white">
+                        {isEbook ? <span className="w-5 shrink-0 text-xs text-slate-400">{index + 1}</span> : null}
+                        <span className="min-w-0 flex-1 truncate" title={item.path}>
+                          {item.label}
+                        </span>
+                        {isEbook ? (
+                          <>
+                            <button
+                              type="button"
+                              className="shrink-0 text-xs text-slate-500 hover:text-slate-800"
+                              disabled={index === 0}
+                              onClick={() => movePath(item.path, -1)}
+                            >
+                              위로
+                            </button>
+                            <button
+                              type="button"
+                              className="shrink-0 text-xs text-slate-500 hover:text-slate-800"
+                              disabled={index === inputItems.length - 1}
+                              onClick={() => movePath(item.path, 1)}
+                            >
+                              아래로
+                            </button>
+                          </>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="shrink-0 text-xs text-slate-500 hover:text-red-600"
+                          onClick={() => removePath(item.path)}
+                        >
+                          제거
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 m-0 text-xs text-slate-400">
+                    {isEbook
+                      ? '스크린샷 이미지를 추가하거나, 파일·폴더를 끌어다 놓으세요.'
+                      : 'PDF 파일을 추가하거나, 파일·폴더를 끌어다 놓으세요.'}
+                  </p>
+                )}
+              </InputDropZone>
             </Field>
 
             <Field
@@ -693,125 +742,130 @@ export default function CleanupPage({ tool = 'ebook-extract' }) {
         </Section>
 
         {job ? (
-          <Section title="진행 상태">
-            <div className="space-y-3 text-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge tone={batchTone(job.state)}>
-                  {job.state === 'done'
-                    ? '완료'
-                    : job.state === 'error'
-                      ? '실패'
-                      : job.state === 'cancelled'
-                        ? '취소됨'
-                        : `${Math.round((job.progress || 0) * 100)}%`}
-                </Badge>
-                <span className="text-slate-500">{job.label}</span>
-                {running ? (
-                  <span className="ml-auto">
-                    <button
-                      type="button"
-                      className={btnDangerClass}
-                      disabled={stopping}
-                      onClick={() => void cancel()}
-                    >
-                      {stopping ? '중지 중…' : '중지'}
-                    </button>
-                  </span>
-                ) : null}
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-slate-200">
-                <div
-                  className="h-full rounded-full bg-app-accent transition-[width] duration-300"
-                  style={{ width: `${Math.round((job.progress || 0) * 100)}%` }}
-                />
-              </div>
-
-              {job.error ? (
-                <p className="m-0 text-xs text-red-600 whitespace-pre-wrap">{job.error}</p>
-              ) : null}
-
-              {job.state === 'done' && job.result?.kind === 'ebook-extract' ? (
-                <div className="space-y-2">
-                  <p className="m-0 text-xs text-slate-500">
-                    출력 {job.result.outputCount}개
-                    {job.result.duplicateCount ? ` · 중복 제외 ${job.result.duplicateCount}개` : ''}
-                    {job.result.blankCount ? ` · 빈 화면 제외 ${job.result.blankCount}개` : ''}
-                    {' · '}
-                    <code className={codeClass}>{job.outputPath}</code>
-                  </p>
-                  {job.result.pdfPath ? (
-                    <p className="m-0 text-xs text-slate-500">
-                      PDF: <code className={codeClass}>{fileName(job.result.pdfPath)}</code>
-                    </p>
+          <div ref={progressSectionRef}>
+            <Section title="진행 상태">
+              <div className="space-y-3 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge tone={batchTone(job.state)}>
+                    {job.state === 'done'
+                      ? '완료'
+                      : job.state === 'error'
+                        ? '실패'
+                        : job.state === 'cancelled'
+                          ? '취소됨'
+                          : `${Math.round((job.progress || 0) * 100)}%`}
+                  </Badge>
+                  <span className="text-slate-500">{job.label}</span>
+                  {running ? (
+                    <span className="ml-auto">
+                      <button
+                        type="button"
+                        className={btnDangerClass}
+                        disabled={stopping}
+                        onClick={() => void cancel()}
+                      >
+                        {stopping ? '중지 중…' : '중지'}
+                      </button>
+                    </span>
                   ) : null}
-                  {native?.showItemInFolder ? (
-                    <div className="flex flex-wrap gap-2 pt-2">
-                      {job.result.pdfPath ? (
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+                  <div
+                    className="h-full rounded-full bg-app-accent transition-[width] duration-300"
+                    style={{ width: `${Math.round((job.progress || 0) * 100)}%` }}
+                  />
+                </div>
+
+                {job.error ? (
+                  <p className="m-0 text-xs text-red-600 whitespace-pre-wrap">{job.error}</p>
+                ) : null}
+
+                {job.state === 'done' && job.result?.kind === 'ebook-extract' ? (
+                  <div className="space-y-2">
+                    <p className="m-0 text-xs text-slate-500">
+                      출력 {job.result.outputCount}개
+                      {job.result.duplicateCount ? ` · 중복 제외 ${job.result.duplicateCount}개` : ''}
+                      {job.result.blankCount ? ` · 빈 화면 제외 ${job.result.blankCount}개` : ''}
+                      {' · '}
+                      <code className={codeClass}>{job.outputPath}</code>
+                    </p>
+                    {job.result.pdfPath ? (
+                      <p className="m-0 text-xs text-slate-500">
+                        PDF: <code className={codeClass}>{fileName(job.result.pdfPath)}</code>
+                      </p>
+                    ) : null}
+                    {native?.showItemInFolder ? (
+                      <div className="flex flex-wrap gap-2 pt-2">
+                        {job.result.pdfPath ? (
+                          <button
+                            type="button"
+                            className={btnClass}
+                            onClick={() => void native.showItemInFolder(job.result.pdfPath)}
+                          >
+                            PDF 보기
+                          </button>
+                        ) : null}
                         <button
                           type="button"
                           className={btnClass}
-                          onClick={() => void native.showItemInFolder(job.result.pdfPath)}
+                          onClick={() => void native.showItemInFolder(job.result.pagesDir || job.outputPath)}
                         >
-                          PDF 보기
+                          폴더 보기
                         </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        className={btnClass}
-                        onClick={() => void native.showItemInFolder(job.result.pagesDir || job.outputPath)}
-                      >
-                        폴더 보기
-                      </button>
-                    </div>
-                  ) : null}
-                </div>
-              ) : null}
-
-              {pdfItems.length > 0 ? (
-                <ul className="space-y-2">
-                  {pdfItems.map((item) => (
-                    <li key={item.inputPath} className="rounded-md border border-slate-200 bg-white px-3 py-2">
-                      <div className="flex flex-wrap items-center gap-2">
-                        <Badge tone={item.unchanged ? 'green' : item.outputPath ? 'green' : 'amber'}>
-                          {item.unchanged ? '변경 없음' : item.outputPath ? '처리됨' : '결과 없음'}
-                        </Badge>
-                        <span className="min-w-0 flex-1 truncate font-medium">{fileName(item.inputPath)}</span>
-                        {item.outputPath ? (
-                          <>
-                            {native?.showItemInFolder ? (
-                              <button
-                                type="button"
-                                className={btnClass}
-                                onClick={() => void native.showItemInFolder(item.outputPath)}
-                              >
-                                보기
-                              </button>
-                            ) : null}
-                          </>
-                        ) : null}
                       </div>
-                      <p className="mt-1 m-0 text-xs text-slate-500">
-                        {item.pagesBefore}→{item.pagesAfter}쪽
-                        {item.removedCount ? ` · 제거 ${item.removedCount}` : ''}
-                        {item.outputPath ? (
-                          <>
-                            {' · '}
-                            <code className={codeClass}>{item.outputPath}</code>
-                          </>
-                        ) : null}
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
+                    ) : null}
+                  </div>
+                ) : null}
 
-              {job.logs?.length ? (
-                <pre className="max-h-56 overflow-auto rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700 whitespace-pre-wrap">
-                  {job.logs.join('\n')}
-                </pre>
-              ) : null}
-            </div>
-          </Section>
+                {pdfItems.length > 0 ? (
+                  <ul className="space-y-2">
+                    {pdfItems.map((item) => (
+                      <li key={item.inputPath} className="rounded-md border border-slate-200 bg-white px-3 py-2">
+                        <div className="flex flex-wrap items-center gap-2">
+                          <Badge tone={item.unchanged ? 'green' : item.outputPath ? 'green' : 'amber'}>
+                            {item.unchanged ? '변경 없음' : item.outputPath ? '처리됨' : '결과 없음'}
+                          </Badge>
+                          <span className="min-w-0 flex-1 truncate font-medium">{fileName(item.inputPath)}</span>
+                          {item.outputPath ? (
+                            <>
+                              {native?.showItemInFolder ? (
+                                <button
+                                  type="button"
+                                  className={btnClass}
+                                  onClick={() => void native.showItemInFolder(item.outputPath)}
+                                >
+                                  보기
+                                </button>
+                              ) : null}
+                            </>
+                          ) : null}
+                        </div>
+                        <p className="mt-1 m-0 text-xs text-slate-500">
+                          {item.pagesBefore}→{item.pagesAfter}쪽
+                          {item.removedCount ? ` · 제거 ${item.removedCount}` : ''}
+                          {item.outputPath ? (
+                            <>
+                              {' · '}
+                              <code className={codeClass}>{item.outputPath}</code>
+                            </>
+                          ) : null}
+                        </p>
+                      </li>
+                    ))}
+                  </ul>
+                ) : null}
+
+                {job.logs?.length ? (
+                  <pre
+                    ref={progressLogRef}
+                    className="max-h-56 overflow-auto rounded-md border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700 whitespace-pre-wrap"
+                  >
+                    {job.logs.join('\n')}
+                  </pre>
+                ) : null}
+              </div>
+            </Section>
+          </div>
         ) : null}
       </div>
     </div>

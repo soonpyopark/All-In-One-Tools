@@ -1,7 +1,16 @@
 import { useEffect, useMemo, useState } from 'react';
+import InputDropZone from '../../components/common/InputDropZone.jsx';
 import { api, getNative } from '../../lib/apiClient.js';
 import { useDialog } from '../../context/DialogContext.jsx';
+import { useReportJobRunning } from '../../context/JobActivityContext.jsx';
+import { useJobProgressScroll } from '../../hooks/useJobProgressScroll.js';
 import { useLoad } from '../../hooks/useLoad.js';
+import {
+  GIF_HOLD_DEFAULT_SECONDS,
+  GIF_HOLD_MAX_SECONDS,
+  GIF_HOLD_MIN_SECONDS,
+  normalizeHoldSeconds,
+} from '../../../shared/gifHold.js';
 import {
   DEFAULT_SIZE_PRESET_ID,
   estimateGifBytes,
@@ -14,12 +23,58 @@ import {
   LoadError,
   Loading,
   Section,
+  ToggleRow,
   btnClass,
   btnDangerClass,
   btnPrimaryClass,
   codeClass,
   inputClass,
 } from '../../components/settings/ui.jsx';
+
+/**
+ * 첫 장·마지막 장 유지 옵션: 켜고 끄는 스위치 + 유지할 시간(초) 입력. 시간은 첫 장과 마지막 장에 각각 적용됩니다.
+ *
+ * @param {{
+ *   subject: string,
+ *   checked: boolean,
+ *   onChange: (checked: boolean) => void,
+ *   seconds: string,
+ *   onSecondsChange: (seconds: string) => void,
+ * }} props
+ */
+function HoldEndsOption({ subject, checked, onChange, seconds, onSecondsChange }) {
+  const applied = normalizeHoldSeconds(seconds);
+  return (
+    <div>
+      <ToggleRow
+        label="첫 장·마지막 장 유지"
+        hint={`켜면 ${subject}의 첫 화면과 마지막 화면을 입력한 시간만큼 멈춰 보여 줍니다.`}
+        checked={checked}
+        onChange={onChange}
+      />
+      {checked ? (
+        <div className="mt-1 flex flex-wrap items-center gap-2 text-sm text-slate-600">
+          <span>유지 시간</span>
+          <input
+            className={`${inputClass} w-24`}
+            type="number"
+            min={GIF_HOLD_MIN_SECONDS}
+            max={GIF_HOLD_MAX_SECONDS}
+            step={0.1}
+            value={seconds}
+            onChange={(event) => onSecondsChange(event.target.value)}
+            onBlur={() => onSecondsChange(String(applied))}
+            aria-label="첫 장·마지막 장 유지 시간(초)"
+          />
+          <span>초씩</span>
+          <span className="text-xs text-slate-400">
+            (총 길이 +{Math.round(applied * 2 * 100) / 100}초, 범위 {GIF_HOLD_MIN_SECONDS}~{GIF_HOLD_MAX_SECONDS}초)
+          </span>
+        </div>
+      ) : null}
+    </div>
+  );
+}
 
 function fileName(filePath) {
   const normalized = String(filePath ?? '').replace(/\\/g, '/');
@@ -54,9 +109,9 @@ function batchTone(state) {
  *  - `gif`   : Movie2GIF 변환 (동영상 → GIF)
  *  - `merge` : GIF 이어붙이기 (여러 GIF → 하나의 GIF)
  *
- * @param {{ mode?: 'gif' | 'merge' }} props
+ * @param {{ mode?: 'gif' | 'merge', featureId?: string }} props
  */
-export default function ConvertPage({ mode = 'gif' }) {
+export default function ConvertPage({ mode = 'gif', featureId } = {}) {
   const dialog = useDialog();
   const native = getNative();
   const { data, loading, error, reload } = useLoad(() => api('convert.listConverters'));
@@ -85,11 +140,17 @@ export default function ConvertPage({ mode = 'gif' }) {
   const [startSec, setStartSec] = useState(0);
   const [durationSec, setDurationSec] = useState('');
   const [mergeSpeed, setMergeSpeed] = useState(1);
+  // 첫·마지막 프레임을 입력한 초만큼 붙잡아 두는 옵션. Movie2GIF 와 이어붙이기가 각각 따로 기억합니다.
+  const [gifHoldEnds, setGifHoldEnds] = useState(false);
+  const [gifHoldSec, setGifHoldSec] = useState(String(GIF_HOLD_DEFAULT_SECONDS));
+  const [mergeHoldEnds, setMergeHoldEnds] = useState(false);
+  const [mergeHoldSec, setMergeHoldSec] = useState(String(GIF_HOLD_DEFAULT_SECONDS));
   const [batch, setBatch] = useState(/** @type {any} */ (null));
   const [busy, setBusy] = useState(false);
   const [stopping, setStopping] = useState(false);
   const [sizeEstimate, setSizeEstimate] = useState(/** @type {any} */ (null));
   const [estimateLoading, setEstimateLoading] = useState(false);
+  const [includeSub, setIncludeSub] = useState(false);
 
   const inputPaths = useMemo(() => inputItems.map((item) => item.path), [inputItems]);
 
@@ -236,6 +297,31 @@ export default function ConvertPage({ mode = 'gif' }) {
     });
   };
 
+  /** 파일·폴더 경로를 지원 확장자로 펼쳐 목록에 넣는다. */
+  const ingestPaths = async (paths) => {
+    if (!paths?.length || !selected) return;
+    try {
+      const { files, skipped, truncated } = await api('files.inspect', {
+        paths,
+        recursive: includeSub,
+        exts: selected.inputExts,
+      });
+      addPaths(files.map((file) => ({ path: file.path, label: file.name })));
+      const notes = [];
+      if (files.length === 0) {
+        notes.push(`추가할 파일이 없습니다. (지원: ${selected.inputExts.join(', ')})`);
+      }
+      if (skipped > 0) notes.push(`지원하지 않는 항목 ${skipped}개는 제외했습니다.`);
+      if (truncated) notes.push('파일이 너무 많아 일부만 가져왔습니다. (최대 20,000개)');
+      if (notes.length > 0) void dialog.alert({ title: '변환', body: notes.join('\n') });
+    } catch (err) {
+      void dialog.alert({
+        title: '변환',
+        body: err instanceof Error ? err.message : '파일을 읽지 못했습니다.',
+      });
+    }
+  };
+
   const pickVideos = async () => {
     if (!native?.pickOpenFiles) return;
     const filters = selected
@@ -254,6 +340,16 @@ export default function ConvertPage({ mode = 'gif' }) {
     });
     if (result?.canceled || !result?.paths?.length) return;
     addPaths(result.paths.map((p) => ({ path: p, label: fileName(p) })));
+  };
+
+  const addFolder = async () => {
+    if (!native?.pickDirectory) return;
+    const picked = await native.pickDirectory({
+      memoryKey: 'convertInput',
+      title: isMergeProfile ? 'GIF 가 있는 폴더 선택' : '동영상이 있는 폴더 선택',
+    });
+    if (picked?.canceled || !picked?.path) return;
+    await ingestPaths([picked.path]);
   };
 
   const removePath = (target) => {
@@ -327,12 +423,14 @@ export default function ConvertPage({ mode = 'gif' }) {
 
       const durationValue = String(durationSec).trim();
       const options = isMergeProfile
-        ? { fps, speed: mergeSpeed }
+        ? { fps, speed: mergeSpeed, holdEnds: mergeHoldEnds, holdSec: normalizeHoldSeconds(mergeHoldSec) }
         : {
             fps,
             width,
             startSec,
             durationSec: durationValue === '' ? null : Number(durationValue),
+            holdEnds: gifHoldEnds,
+            holdSec: normalizeHoldSeconds(gifHoldSec),
           };
       const res = await api('convert.start', {
         converterId: selected.id,
@@ -379,10 +477,25 @@ export default function ConvertPage({ mode = 'gif' }) {
     void native.showItemInFolder(outputPath);
   };
 
+  const running = batch?.state === 'queued' || batch?.state === 'running';
+  useReportJobRunning(
+    featureId,
+    running,
+    mode === 'merge' ? 'GIF 이어붙이는 중' : 'GIF 변환 중',
+  );
+  const progressFollowKey = batch
+    ? `${batch.state}:${batch.progress}:${batch.done}:${(batch.jobs ?? [])
+        .map((job) => `${job.id}:${job.state}:${job.progress}`)
+        .join('|')}`
+    : '';
+  const { sectionRef: progressSectionRef } = useJobProgressScroll({
+    active: Boolean(batch),
+    followKey: progressFollowKey,
+  });
+
   if (loading && !data) return <div className="p-6"><Loading /></div>;
   if (error) return <div className="p-6"><LoadError message={error} onRetry={reload} /></div>;
 
-  const running = batch?.state === 'queued' || batch?.state === 'running';
   const selectedPreset = presets.find((p) => p.id === presetId);
 
   const presetPercentLabel = (presetFps, presetWidth) => {
@@ -410,8 +523,8 @@ export default function ConvertPage({ mode = 'gif' }) {
   };
 
   return (
-    <div className="h-full overflow-auto p-6">
-      <div className="mx-auto max-w-3xl space-y-5">
+    <div className="h-full overflow-auto py-6 pl-6 pr-20">
+      <div className="space-y-5">
         <section>
           <h1 className="m-0 text-xl font-semibold text-slate-900">
             {isMergeProfile ? 'GIF 이어붙이기' : 'Movie2GIF 변환'}
@@ -455,72 +568,101 @@ export default function ConvertPage({ mode = 'gif' }) {
               label="입력 파일"
               hint={
                 selected
-                  ? `지원: ${selected.inputExts.join(', ')} · ${inputItems.length}개`
+                  ? `지원: ${selected.inputExts.join(', ')} · 폴더 추가 시 하위 폴더 ${includeSub ? '포함' : '제외'} · ${inputItems.length}개`
                   : undefined
               }
             >
-              <div className="flex flex-wrap gap-2">
-                <button
-                  type="button"
-                  className={btnClass}
-                  disabled={busy || running}
-                  onClick={() => void pickVideos()}
-                >
-                  파일 추가
-                </button>
-                {inputItems.length > 0 ? (
-                  <button type="button" className={btnClass} onClick={clearPaths}>
-                    목록 비우기
+              <InputDropZone
+                disabled={busy || running}
+                emptyHint="놓으면 목록에 추가됩니다"
+                onUnsupported={() =>
+                  void dialog.alert({
+                    title: '변환',
+                    body: '파일 끌어놓기를 쓰려면 앱을 다시 시작해 주세요. (파일·폴더 추가 버튼은 바로 사용할 수 있습니다)',
+                  })
+                }
+                onPaths={(paths) => void ingestPaths(paths)}
+              >
+                <div className="flex flex-wrap gap-2">
+                  <button
+                    type="button"
+                    className={btnClass}
+                    disabled={busy || running}
+                    onClick={() => void pickVideos()}
+                  >
+                    파일 추가
                   </button>
-                ) : null}
-              </div>
-              {inputItems.length > 0 ? (
-                <ul className="mt-3 max-h-48 space-y-1 overflow-auto rounded-md border border-slate-200 bg-slate-50 p-2 text-sm">
-                  {inputItems.map((item, index) => (
-                    <li key={item.key} className="flex items-center gap-2 rounded px-2 py-1 hover:bg-white">
-                      {isMergeProfile ? (
-                        <span className="w-5 shrink-0 text-xs text-slate-400">{index + 1}</span>
-                      ) : null}
-                      <span className="min-w-0 flex-1 truncate" title={item.path}>
-                        {item.label}
-                      </span>
-                      {isMergeProfile ? (
-                        <>
-                          <button
-                            type="button"
-                            className="shrink-0 text-xs text-slate-500 hover:text-slate-800"
-                            disabled={index === 0}
-                            onClick={() => movePath(item.path, -1)}
-                          >
-                            위로
-                          </button>
-                          <button
-                            type="button"
-                            className="shrink-0 text-xs text-slate-500 hover:text-slate-800"
-                            disabled={index === inputItems.length - 1}
-                            onClick={() => movePath(item.path, 1)}
-                          >
-                            아래로
-                          </button>
-                        </>
-                      ) : null}
-                      <button
-                        type="button"
-                        className="shrink-0 text-xs text-slate-500 hover:text-red-600"
-                        onClick={() => removePath(item.path)}
-                      >
-                        제거
-                      </button>
-                    </li>
-                  ))}
-                </ul>
-              ) : (
-                <p className="mt-2 m-0 text-xs text-slate-400">
-                  {isMergeProfile
-                    ? `GIF를 ${minInputs}개 이상 추가해 주세요.`
-                    : '동영상을 하나 이상 추가해 주세요.'}
-                </p>
-              )}
+                  <button
+                    type="button"
+                    className={btnClass}
+                    disabled={busy || running}
+                    onClick={() => void addFolder()}
+                  >
+                    폴더 추가
+                  </button>
+                  {inputItems.length > 0 ? (
+                    <button type="button" className={btnClass} onClick={clearPaths}>
+                      목록 비우기
+                    </button>
+                  ) : null}
+                </div>
+                <div className="mt-2">
+                  <ToggleRow
+                    label="폴더 추가 시 하위 폴더 포함"
+                    hint="켜면 선택한 폴더 아래의 모든 하위 폴더에서도 파일을 모읍니다. 끌어다 놓기에도 적용됩니다."
+                    checked={includeSub}
+                    onChange={setIncludeSub}
+                    disabled={busy || running}
+                  />
+                </div>
+                {inputItems.length > 0 ? (
+                  <ul className="mt-3 max-h-48 space-y-1 overflow-auto rounded-md border border-slate-200 bg-slate-50 p-2 text-sm">
+                    {inputItems.map((item, index) => (
+                      <li key={item.key} className="flex items-center gap-2 rounded px-2 py-1 hover:bg-white">
+                        {isMergeProfile ? (
+                          <span className="w-5 shrink-0 text-xs text-slate-400">{index + 1}</span>
+                        ) : null}
+                        <span className="min-w-0 flex-1 truncate" title={item.path}>
+                          {item.label}
+                        </span>
+                        {isMergeProfile ? (
+                          <>
+                            <button
+                              type="button"
+                              className="shrink-0 text-xs text-slate-500 hover:text-slate-800"
+                              disabled={index === 0}
+                              onClick={() => movePath(item.path, -1)}
+                            >
+                              위로
+                            </button>
+                            <button
+                              type="button"
+                              className="shrink-0 text-xs text-slate-500 hover:text-slate-800"
+                              disabled={index === inputItems.length - 1}
+                              onClick={() => movePath(item.path, 1)}
+                            >
+                              아래로
+                            </button>
+                          </>
+                        ) : null}
+                        <button
+                          type="button"
+                          className="shrink-0 text-xs text-slate-500 hover:text-red-600"
+                          onClick={() => removePath(item.path)}
+                        >
+                          제거
+                        </button>
+                      </li>
+                    ))}
+                  </ul>
+                ) : (
+                  <p className="mt-2 m-0 text-xs text-slate-400">
+                    {isMergeProfile
+                      ? `GIF를 ${minInputs}개 이상 추가하거나, 파일·폴더를 끌어다 놓으세요.`
+                      : '동영상을 추가하거나, 파일·폴더를 끌어다 놓으세요.'}
+                  </p>
+                )}
+              </InputDropZone>
             </Field>
 
             <Field
@@ -578,6 +720,15 @@ export default function ConvertPage({ mode = 'gif' }) {
                     onChange={(event) => setMergeSpeed(Number(event.target.value))}
                   />
                 </Field>
+                <div className="sm:col-span-2">
+                  <HoldEndsOption
+                    subject="이어붙인 GIF"
+                    checked={mergeHoldEnds}
+                    onChange={setMergeHoldEnds}
+                    seconds={mergeHoldSec}
+                    onSecondsChange={setMergeHoldSec}
+                  />
+                </div>
               </div>
             ) : (
               <>
@@ -674,6 +825,15 @@ export default function ConvertPage({ mode = 'gif' }) {
                       onChange={(event) => setDurationSec(event.target.value)}
                     />
                   </Field>
+                  <div className="sm:col-span-2">
+                    <HoldEndsOption
+                      subject="GIF"
+                      checked={gifHoldEnds}
+                      onChange={setGifHoldEnds}
+                      seconds={gifHoldSec}
+                      onSecondsChange={setGifHoldSec}
+                    />
+                  </div>
                 </div>
               </>
             )}
@@ -713,99 +873,101 @@ export default function ConvertPage({ mode = 'gif' }) {
         </Section>
 
         {batch ? (
-          <Section title="진행 상태">
-            <div className="space-y-3 text-sm">
-              <div className="flex flex-wrap items-center gap-2">
-                <Badge tone={batchTone(batch.state)}>
-                  {batch.state === 'done'
-                    ? '완료'
-                    : batch.state === 'error'
-                      ? '일부/전체 실패'
-                      : batch.state === 'cancelled'
-                        ? '취소됨'
-                        : `${Math.round((batch.progress || 0) * 100)}%`}
-                </Badge>
-                <span className="text-slate-500">
-                  {batch.done ?? 0}/{batch.total ?? batch.jobs?.length ?? 0} 완료
-                  {(batch.failed ?? 0) > 0 ? ` · 실패 ${batch.failed}` : ''}
-                  {(batch.cancelled ?? 0) > 0 ? ` · 취소 ${batch.cancelled}` : ''}
-                </span>
-                {running ? (
-                  <span className="ml-auto">
-                    <button
-                      type="button"
-                      className={btnDangerClass}
-                      disabled={stopping}
-                      onClick={() => void cancel()}
-                    >
-                      {stopping ? '중지 중…' : '전체 중지'}
-                    </button>
+          <div ref={progressSectionRef}>
+            <Section title="진행 상태">
+              <div className="space-y-3 text-sm">
+                <div className="flex flex-wrap items-center gap-2">
+                  <Badge tone={batchTone(batch.state)}>
+                    {batch.state === 'done'
+                      ? '완료'
+                      : batch.state === 'error'
+                        ? '일부/전체 실패'
+                        : batch.state === 'cancelled'
+                          ? '취소됨'
+                          : `${Math.round((batch.progress || 0) * 100)}%`}
+                  </Badge>
+                  <span className="text-slate-500">
+                    {batch.done ?? 0}/{batch.total ?? batch.jobs?.length ?? 0} 완료
+                    {(batch.failed ?? 0) > 0 ? ` · 실패 ${batch.failed}` : ''}
+                    {(batch.cancelled ?? 0) > 0 ? ` · 취소 ${batch.cancelled}` : ''}
                   </span>
-                ) : null}
-              </div>
-              <div className="h-2 overflow-hidden rounded-full bg-slate-200">
-                <div
-                  className="h-full rounded-full bg-app-accent transition-[width] duration-300"
-                  style={{ width: `${Math.round((batch.progress || 0) * 100)}%` }}
-                />
-              </div>
-
-              <ul className="space-y-2">
-                {(batch.jobs ?? []).map((job) => (
-                  <li
-                    key={job.id}
-                    className="rounded-md border border-slate-200 bg-white px-3 py-2"
-                  >
-                    <div className="flex flex-wrap items-center gap-2">
-                      <Badge tone={batchTone(job.state)}>{progressLabel(job)}</Badge>
-                      <span
-                        className="min-w-0 flex-1 truncate font-medium text-slate-800"
-                        title={(job.inputPaths?.length ? job.inputPaths : [job.inputPath]).join('\n')}
+                  {running ? (
+                    <span className="ml-auto">
+                      <button
+                        type="button"
+                        className={btnDangerClass}
+                        disabled={stopping}
+                        onClick={() => void cancel()}
                       >
-                        {job.inputPaths?.length > 1
-                          ? `${fileName(job.inputPath)} 외 ${job.inputPaths.length - 1}개`
-                          : fileName(job.inputPath)}
-                      </span>
-                      {job.state === 'queued' || job.state === 'running' ? (
-                        <button
-                          type="button"
-                          className={btnDangerClass}
-                          disabled={stopping}
-                          onClick={() => void stopJobs(job.id)}
+                        {stopping ? '중지 중…' : '전체 중지'}
+                      </button>
+                    </span>
+                  ) : null}
+                </div>
+                <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+                  <div
+                    className="h-full rounded-full bg-app-accent transition-[width] duration-300"
+                    style={{ width: `${Math.round((batch.progress || 0) * 100)}%` }}
+                  />
+                </div>
+
+                <ul className="space-y-2">
+                  {(batch.jobs ?? []).map((job) => (
+                    <li
+                      key={job.id}
+                      className="rounded-md border border-slate-200 bg-white px-3 py-2"
+                    >
+                      <div className="flex flex-wrap items-center gap-2">
+                        <Badge tone={batchTone(job.state)}>{progressLabel(job)}</Badge>
+                        <span
+                          className="min-w-0 flex-1 truncate font-medium text-slate-800"
+                          title={(job.inputPaths?.length ? job.inputPaths : [job.inputPath]).join('\n')}
                         >
-                          중지
-                        </button>
-                      ) : null}
-                      {job.state === 'done' && native?.showItemInFolder ? (
-                        <button
-                          type="button"
-                          className={btnClass}
-                          onClick={() => revealOutput(job.outputPath)}
-                        >
-                          보기
-                        </button>
-                      ) : null}
-                    </div>
-                    {job.state === 'running' || job.state === 'queued' ? (
-                      <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
-                        <div
-                          className="h-full rounded-full bg-app-accent/80 transition-[width] duration-300"
-                          style={{ width: `${Math.round((job.progress || 0) * 100)}%` }}
-                        />
+                          {job.inputPaths?.length > 1
+                            ? `${fileName(job.inputPath)} 외 ${job.inputPaths.length - 1}개`
+                            : fileName(job.inputPath)}
+                        </span>
+                        {job.state === 'queued' || job.state === 'running' ? (
+                          <button
+                            type="button"
+                            className={btnDangerClass}
+                            disabled={stopping}
+                            onClick={() => void stopJobs(job.id)}
+                          >
+                            중지
+                          </button>
+                        ) : null}
+                        {job.state === 'done' && native?.showItemInFolder ? (
+                          <button
+                            type="button"
+                            className={btnClass}
+                            onClick={() => revealOutput(job.outputPath)}
+                          >
+                            보기
+                          </button>
+                        ) : null}
                       </div>
-                    ) : null}
-                    {job.error ? (
-                      <p className="mt-1 m-0 text-xs text-red-600 whitespace-pre-wrap">{job.error}</p>
-                    ) : job.state === 'done' ? (
-                      <p className="mt-1 m-0 break-all text-xs text-slate-500">
-                        <code className={codeClass}>{job.outputPath}</code>
-                      </p>
-                    ) : null}
-                  </li>
-                ))}
-              </ul>
-            </div>
-          </Section>
+                      {job.state === 'running' || job.state === 'queued' ? (
+                        <div className="mt-2 h-1.5 overflow-hidden rounded-full bg-slate-100">
+                          <div
+                            className="h-full rounded-full bg-app-accent/80 transition-[width] duration-300"
+                            style={{ width: `${Math.round((job.progress || 0) * 100)}%` }}
+                          />
+                        </div>
+                      ) : null}
+                      {job.error ? (
+                        <p className="mt-1 m-0 text-xs text-red-600 whitespace-pre-wrap">{job.error}</p>
+                      ) : job.state === 'done' ? (
+                        <p className="mt-1 m-0 break-all text-xs text-slate-500">
+                          <code className={codeClass}>{job.outputPath}</code>
+                        </p>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            </Section>
+          </div>
         ) : null}
       </div>
     </div>

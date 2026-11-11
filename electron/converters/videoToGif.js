@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { DEFAULT_SIZE_PRESET_ID, SIZE_PRESETS, getSizePreset } from '../../shared/sizePresets.js';
+import { gifHoldFilter, normalizeHoldSeconds } from '../../shared/gifHold.js';
 import { parseFfmpegTimeSeconds, runFfmpeg } from '../ffmpegService.js';
 
 const INPUT_EXTS = ['.mp4', '.mov', '.mkv', '.webm', '.avi', '.m4v', '.wmv', '.mpeg', '.mpg'];
@@ -35,6 +36,9 @@ export function normalizeOptions(raw = {}) {
     width: clampNumber(src.width, 32, 1920, DEFAULT_PRESET.width),
     startSec: clampNumber(src.startSec, 0, 3600 * 24, 0),
     durationSec,
+    // 켜면 첫 프레임과 마지막 프레임을 각각 holdSec 초씩 붙잡아 둡니다.
+    holdEnds: src.holdEnds === true,
+    holdSec: normalizeHoldSeconds(src.holdSec),
   };
 }
 
@@ -43,7 +47,8 @@ export function normalizeOptions(raw = {}) {
  * @param {'palette' | 'encode'} stage
  */
 function buildFilter(options, stage) {
-  const scale = `fps=${options.fps},scale=${options.width}:-1:flags=lanczos`;
+  const hold = options.holdEnds ? `,${gifHoldFilter(options.holdSec)}` : '';
+  const scale = `fps=${options.fps},scale=${options.width}:-1:flags=lanczos${hold}`;
   if (stage === 'palette') return `${scale},palettegen=stats_mode=diff`;
   return `${scale}[x];[x][1:v]paletteuse=dither=bayer:bayer_scale=5`;
 }
@@ -65,9 +70,10 @@ export const videoToGif = {
   normalizeOptions,
   async run({ ffmpegPath, inputPath, outputPath, options, signal, onProgress }) {
     const opts = normalizeOptions(options);
+    const holdExtra = opts.holdEnds ? opts.holdSec * 2 : 0;
     const estimated =
       opts.durationSec && opts.durationSec > 0
-        ? opts.durationSec
+        ? opts.durationSec + holdExtra
         : null;
 
     const workDir = fs.mkdtempSync(path.join(os.tmpdir(), 'vti-gif-'));

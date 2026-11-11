@@ -6,6 +6,13 @@
 /** Display name (UI, window title). */
 export const APP_NAME = 'All In One Tools';
 
+/**
+ * Windows AppUserModelID (`package.json` build.appId 와 동일).
+ * main.js 에서 app.setAppUserModelId 로 건다.
+ * (MSI ShortcutProperty 는 설치 중 Warning 1946 팝업을 자주 일으켜 사용하지 않음)
+ */
+export const APP_USER_MODEL_ID = 'com.alltools.app';
+
 /** File-system friendly name used in installer / archive file names. */
 export const APP_FILE_NAME = 'AllTools';
 
@@ -15,7 +22,7 @@ export const APP_VERSION = '1.0.0';
  * Package build id (YYMMDD_HHMMSS). Rewritten by `npm run build:release*`
  * (scripts/sync-build-stamp.mjs); matches the suffix of the produced files.
  */
-export const APP_BUILD_STAMP = '261109_232251';
+export const APP_BUILD_STAMP = '261111_175641';
 
 /**
  * GitHub repository (`owner/repo`) whose latest release is used by the

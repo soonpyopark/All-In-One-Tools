@@ -5,6 +5,10 @@
     -d AppName=… -d ExeName=… -d ProductVersion=x.y.z.n -d ProductCode={guid}
     -d StageDir=<absolute path of the unpacked app> -d InstallerDir=<this folder>
 
+  AppUserModelID 는 MSI ShortcutProperty 로 넣지 않는다.
+  (설치 중 Warning 1946 팝업이 자주 뜸 — 검색·PowerToys 등이 .lnk 를 잠그면 실패)
+  프로세스 ID 는 main.js 의 app.setAppUserModelId 로 고정한다.
+
   Mutable state (settings) lives in %APPDATA% — never inside
   the install folder — so upgrades and uninstalls cannot wipe it.
 -->
@@ -51,13 +55,13 @@
         Id="StartMenuShortcut"
         Directory="ApplicationProgramsFolder"
         Guid="2B6F1A44-8C3D-4E57-9A02-71D5C8E3B610">
+        <!-- Icon 은 exe 에 내장된 것을 쓴다. WiX Icon 테이블을 쓰면 재부팅·업그레이드 후 캐시가 깨져 흰 아이콘이 된다. -->
         <Shortcut
           Id="StartMenuShortcutLink"
           Name="$(AppName)"
           Description="$(AppName)"
           Target="[INSTALLFOLDER]$(ExeName)"
-          WorkingDirectory="INSTALLFOLDER"
-          Icon="AppIcon.ico" />
+          WorkingDirectory="INSTALLFOLDER" />
         <RemoveFolder Id="RemoveApplicationProgramsFolder" Directory="ApplicationProgramsFolder" On="uninstall" />
         <RegistryValue
           Root="HKCU"
@@ -77,8 +81,7 @@
           Name="$(AppName)"
           Description="$(AppName)"
           Target="[INSTALLFOLDER]$(ExeName)"
-          WorkingDirectory="INSTALLFOLDER"
-          Icon="AppIcon.ico" />
+          WorkingDirectory="INSTALLFOLDER" />
         <RegistryValue
           Root="HKCU"
           Key="Software\$(AppName)"

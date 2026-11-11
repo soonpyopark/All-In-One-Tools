@@ -8,9 +8,13 @@
 import * as capture from './capture.js';
 import * as cleanup from './cleanup.js';
 import * as convert from './convert.js';
+import * as files from './files.js';
+import * as ocr from './ocr.js';
+import * as qr from './qr.js';
+import * as rename from './rename.js';
 
 /** @type {{ register: () => void }[]} */
-const MODULES = [convert, cleanup, capture];
+const MODULES = [convert, cleanup, capture, rename, ocr, qr, files];
 
 export function registerModules() {
   for (const mod of MODULES) mod.register();

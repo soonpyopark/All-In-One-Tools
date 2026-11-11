@@ -21,6 +21,9 @@ import PdfDedupPage from './cleanup/PdfDedupPage.jsx';
 import ConvertPage from './convert/ConvertPage.jsx';
 import MergeGifsPage from './convert/MergeGifsPage.jsx';
 import HomePage from './home/HomePage.jsx';
+import OcrPage from './ocr/OcrPage.jsx';
+import QrPage from './qr/QrPage.jsx';
+import RenamePage from './rename/RenamePage.jsx';
 import SubnetPage from './subnet/SubnetPage.jsx';
 
 /** @type {FeatureDefinition[]} */
@@ -43,12 +46,28 @@ export const FEATURES = [
     component: CleanupPage,
   },
   {
+    id: 'pdf-ocr',
+    label: 'PDF & 이미지 OCR',
+    icon: '🔤',
+    description: '스캔 PDF·이미지에 검색 가능한 글자 층을 붙입니다. 이미지는 PDF 로 변환한 뒤 OCR 합니다. 기본 한국어·영어.',
+    color: ['#38bdf8', '#0284c7'],
+    component: OcrPage,
+  },
+  {
     id: 'pdf-dedup',
     label: 'PDF 중복페이지 정리',
     icon: '🧹',
     description: 'PDF 에서 비슷한 페이지를 찾아 제거합니다. (연속 / 문서 전체)',
     color: ['#2dd4bf', '#0f9488'],
     component: PdfDedupPage,
+  },
+  {
+    id: 'rename',
+    label: '파일명 일괄 변경',
+    icon: '✏️',
+    description: '여러 파일의 이름을 한 번에 바꿉니다. 문자열 바꾸기, 앞뒤 추가, 위치·묶인곳 지우기, 번호 붙이기, 확장자 변경, 한 폴더에 모으기를 지원합니다.',
+    color: ['#f472b6', '#c026d3'],
+    component: RenamePage,
   },
   {
     id: 'convert',
@@ -65,6 +84,14 @@ export const FEATURES = [
     description: '여러 GIF 를 순서대로 이어 붙여 하나의 GIF 로 만듭니다.',
     color: ['#7dd3fc', '#2b8fd6'],
     component: MergeGifsPage,
+  },
+  {
+    id: 'qr',
+    label: 'QR 코드 생성기',
+    icon: '🔳',
+    description: '텍스트·URL을 단색 QR로 보내고, 화면의 QR을 읽어 텍스트로 복원합니다. (캡처보드용)',
+    color: ['#94a3b8', '#475569'],
+    component: QrPage,
   },
   {
     id: 'adjust',

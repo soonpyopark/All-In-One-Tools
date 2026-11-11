@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>QR 전체 화면</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        background: #fff;
+        overflow: hidden;
+        font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
+        user-select: none;
+      }
+      body {
+        display: flex;
+        flex-direction: column;
+        cursor: pointer;
+      }
+      #box {
+        flex: 1;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        min-height: 0;
+        padding: 8px;
+        box-sizing: border-box;
+      }
+      #qr {
+        image-rendering: pixelated;
+        image-rendering: crisp-edges;
+        background: #fff;
+      }
+      #hint {
+        height: 28px;
+        line-height: 28px;
+        text-align: center;
+        color: #888;
+        font-size: 13px;
+        flex-shrink: 0;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="box"><img id="qr" alt="QR" /></div>
+    <div id="hint">ESC 또는 클릭: 닫기</div>
+    <script>
+      let modules = 29;
+      const img = document.getElementById('qr');
+      const box = document.getElementById('box');
+
+      function fit() {
+        const avail = Math.max(32, Math.min(box.clientWidth, box.clientHeight));
+        const side = Math.max(32, Math.floor(avail / modules) * modules);
+        img.style.width = side + 'px';
+        img.style.height = side + 'px';
+      }
+
+      img.onload = fit;
+      window.addEventListener('resize', fit);
+
+      window.qrFullscreen.onInit((data) => {
+        modules = Math.max(1, Math.floor(Number(data?.canvasModules) || 29));
+        img.src = String(data?.dataUrl || '');
+        fit();
+      });
+
+      document.body.addEventListener('click', () => window.close());
+      window.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') window.close();
+      });
+    </script>
+  </body>
+</html>
