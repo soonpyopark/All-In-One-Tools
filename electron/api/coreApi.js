@@ -66,6 +66,7 @@ export function registerCoreApi() {
     if ('closeToTray' in body) patch.closeToTray = Boolean(body.closeToTray);
     if ('ffmpegDir' in body) patch.ffmpegDir = typeof body.ffmpegDir === 'string' ? body.ffmpegDir.trim() : '';
     if ('exportDir' in body) patch.exportDir = typeof body.exportDir === 'string' ? body.exportDir.trim() : '';
+    if ('featureOrder' in body) patch.featureOrder = body.featureOrder;
     if ('autoLaunch' in body && runtime.autoLaunch?.supported) {
       runtime.autoLaunch.set(Boolean(body.autoLaunch));
     }

@@ -95,7 +95,7 @@ export const FEATURES = [
   },
   {
     id: 'adjust',
-    label: '영상(음원) 피치 & 볼륨 조절',
+    label: '피치 & 볼륨 조절',
     icon: '🎛️',
     description: '영상·음원의 피치(음높이)와 볼륨을 조절합니다.',
     color: ['#b79cff', '#7d58df'],

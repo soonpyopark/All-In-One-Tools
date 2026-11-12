@@ -68,7 +68,7 @@ export default function SubnetPage() {
   };
 
   return (
-    <div className="h-full overflow-auto py-6 pl-6 pr-20">
+    <div className="h-full overflow-auto px-6 py-6">
       <div className="space-y-5">
         <section>
           <h1 className="m-0 text-xl font-semibold text-slate-900">서브넷 계산기</h1>

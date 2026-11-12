@@ -291,10 +291,10 @@ export default function AdjustPage({ featureId } = {}) {
   }
 
   return (
-    <div className="h-full overflow-auto py-6 pl-6 pr-20">
+    <div className="h-full overflow-auto px-6 py-6">
       <div className="space-y-5">
         <section>
-          <h1 className="m-0 text-xl font-semibold text-slate-900">영상(음원) 피치 & 볼륨 조절</h1>
+          <h1 className="m-0 text-xl font-semibold text-slate-900">피치 & 볼륨 조절</h1>
           <p className="mt-1 text-sm text-slate-500">
             영상·음원의 피치와 볼륨을 조절합니다. 여러 파일을 한 번에 처리할 수 있습니다.
             {' 영상은 비디오를 유지한 채 오디오만 변환합니다.'}

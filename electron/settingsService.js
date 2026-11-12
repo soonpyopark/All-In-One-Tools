@@ -14,6 +14,7 @@ const SETTINGS_FILE = 'settings.json';
  *   ffmpegDir: string,
  *   exportDir: string,
  *   folders: Record<string, string>,
+ *   featureOrder: string[],
  * }} AppSettings
  */
 
@@ -27,7 +28,28 @@ function defaultSettings() {
     ffmpegDir: '',
     exportDir: '',
     folders: {},
+    featureOrder: [],
   };
+}
+
+/**
+ * 홈·사이드바 메뉴 id 순서. `home` 은 저장하지 않는다.
+ * @param {unknown} raw
+ * @returns {string[]}
+ */
+function normalizeFeatureOrder(raw) {
+  if (!Array.isArray(raw)) return [];
+  /** @type {string[]} */
+  const out = [];
+  const seen = new Set();
+  for (const item of raw) {
+    const id = String(item ?? '').trim();
+    if (!id || id === 'home' || seen.has(id) || !/^[A-Za-z0-9-]{1,64}$/.test(id)) continue;
+    seen.add(id);
+    out.push(id);
+    if (out.length >= 64) break;
+  }
+  return out;
 }
 
 /** Keys of the remembered folders (see `rememberFolder`). */
@@ -65,6 +87,7 @@ function normalizeSettings(raw) {
     ffmpegDir: typeof src.ffmpegDir === 'string' ? src.ffmpegDir.trim() : base.ffmpegDir,
     exportDir: typeof src.exportDir === 'string' ? src.exportDir.trim() : base.exportDir,
     folders: normalizeFolders(src.folders),
+    featureOrder: normalizeFeatureOrder(src.featureOrder),
   };
 }
 

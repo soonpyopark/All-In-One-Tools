@@ -374,6 +374,18 @@ function registerIpc() {
     shell.showItemInFolder(resolved);
     return true;
   });
+
+  handleTrusted('frame:getAlwaysOnTop', (event) => {
+    const win = senderWindow(event);
+    return { enabled: Boolean(win && !win.isDestroyed() && win.isAlwaysOnTop()) };
+  });
+
+  handleTrusted('frame:setAlwaysOnTop', (event, enabled) => {
+    const win = senderWindow(event);
+    if (!win || win.isDestroyed()) return { enabled: false };
+    win.setAlwaysOnTop(Boolean(enabled));
+    return { enabled: win.isAlwaysOnTop() };
+  });
 }
 
 /* -------------------------------------------------------------------------- */

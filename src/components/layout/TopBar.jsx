@@ -40,6 +40,7 @@ export default function TopBar({ settingsOpen, onToggleSettings }) {
   const appInfo = useAppInfo();
   const dialog = useDialog();
   const [updateChecking, setUpdateChecking] = useState(false);
+
   const handleUpdateCheck = () => {
     if (updateChecking) return;
     setUpdateChecking(true);

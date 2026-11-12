@@ -310,7 +310,7 @@ export default function QrPage() {
   };
 
   return (
-    <div className="flex h-full min-h-0 flex-col overflow-auto py-6 pl-6 pr-20">
+    <div className="flex h-full min-h-0 flex-col overflow-auto px-6 py-6">
       <div className="mb-4 flex flex-wrap items-end justify-between gap-3">
         <div>
           <h1 className="m-0 text-xl font-semibold text-slate-900">{TITLE}</h1>
