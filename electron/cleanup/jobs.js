@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { passwordForPath } from '../pdf/passwords.js';
 import { processEbookExtract } from './ebookExtract.js';
 import { processPdfDedup } from './pdfDedup.js';
 
@@ -80,6 +81,7 @@ async function runJob(job) {
     if (job.kind === 'pdf-dedup') {
       const results = [];
       const preferredDir = String(options.outputDir ?? '').trim();
+      const passwords = options.passwords;
       for (let i = 0; i < job.inputPaths.length; i += 1) {
         if (controller.signal.aborted) throw new Error('작업이 취소되었습니다.');
         const inputPath = job.inputPaths[i];
@@ -88,6 +90,7 @@ async function runJob(job) {
           outputDir: preferredDir || path.dirname(inputPath),
           mode: options.mode === 'global' ? 'global' : 'consecutive',
           similarityPercent: Number(options.similarityPercent) || 99.9999,
+          password: passwordForPath(passwords, inputPath),
           signal: controller.signal,
           onProgress: (ratio) => {
             const base = i / job.inputPaths.length;

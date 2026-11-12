@@ -6,6 +6,7 @@ import { useReportJobRunning } from '../../context/JobActivityContext.jsx';
 import { useJobProgressScroll } from '../../hooks/useJobProgressScroll.js';
 import { useLoad } from '../../hooks/useLoad.js';
 import { openExternalUrl } from '../../lib/openExternal.js';
+import { collectPdfPasswords } from '../../lib/pdfPasswords.js';
 import { TINY_PDF_EDITOR_URL } from '../../../shared/constants.js';
 import RegionPreview from './RegionPreview.jsx';
 import {
@@ -307,6 +308,20 @@ export default function CleanupPage({ tool = 'ebook-extract', featureId } = {}) 
     }
     setBusy(true);
     try {
+      let runPaths = inputPaths;
+      /** @type {Record<string, string>} */
+      let passwords = {};
+      if (isPdf) {
+        const unlocked = await collectPdfPasswords(inputPaths, dialog);
+        if (unlocked.cancelled) return;
+        if (unlocked.paths.length === 0) {
+          void dialog.alert({ title: pageTitle, body: '처리할 PDF가 없습니다.' });
+          return;
+        }
+        runPaths = unlocked.paths;
+        passwords = unlocked.passwords;
+      }
+
       const options = isEbook
         ? {
             consecutiveImages,
@@ -325,10 +340,10 @@ export default function CleanupPage({ tool = 'ebook-extract', featureId } = {}) 
                   }
                 : null,
           }
-        : { mode: dedupMode, similarityPercent };
+        : { mode: dedupMode, similarityPercent, passwords };
       const res = await api('cleanup.start', {
         kind: selected.id,
-        inputPaths,
+        inputPaths: runPaths,
         outputDir: outputDir.trim(),
         options,
       });

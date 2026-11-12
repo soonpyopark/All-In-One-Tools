@@ -6,6 +6,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as mupdf from 'mupdf';
 import sharp from 'sharp';
+import { openPdfDocument } from './passwords.js';
 
 export const OPTIMIZE_DPI_CHOICES = [36, 48, 72, 96, 120, 150, 200, 300, 400, 600];
 const OPTIMIZE_DEFAULT_JPEG_QUALITY = 25;
@@ -269,17 +270,13 @@ async function recompressOneImage(pdf, obj, opts) {
  * @param {string} inputPath
  * @param {string} outputPath
  * @param {ReturnType<typeof normalizeCompressOptions>} options
+ * @param {string} [password]
  */
-export async function compressPdfFile(inputPath, outputPath, options) {
+export async function compressPdfFile(inputPath, outputPath, options, password = '') {
   const opts = normalizeCompressOptions(options);
   const sourceBytes = fs.readFileSync(inputPath);
   const beforeBytes = sourceBytes.byteLength;
-  const opened = mupdf.Document.openDocument(sourceBytes, 'application/pdf');
-  if (!(opened instanceof mupdf.PDFDocument) && !opened.isPDF?.()) {
-    throw new Error('PDF 파일이 아닙니다.');
-  }
-  /** @type {import('mupdf').PDFDocument} */
-  const pdf = /** @type {any} */ (opened);
+  const pdf = openPdfDocument(sourceBytes, password);
 
   const jpegQuality = optimizeJpegQuality(opts.imageQualityPercent);
   const targetDpi = Math.max(MIN_IMAGE_DPI, opts.imageDpi);
@@ -345,11 +342,17 @@ export async function compressPdfFile(inputPath, outputPath, options) {
  * @param {string} outputDir
  * @param {ReturnType<typeof normalizeCompressOptions>} options
  */
-export async function compressPdfToDir(inputPath, outputDir, options) {
+/**
+ * @param {string} inputPath
+ * @param {string} outputDir
+ * @param {ReturnType<typeof normalizeCompressOptions>} options
+ * @param {string} [password]
+ */
+export async function compressPdfToDir(inputPath, outputDir, options, password = '') {
   const base = path.basename(inputPath, path.extname(inputPath));
   const outDir = outputDir?.trim()
     ? path.resolve(outputDir)
     : path.dirname(path.resolve(inputPath));
   const outputPath = path.join(outDir, `${base}_optimize.pdf`);
-  return compressPdfFile(inputPath, outputPath, options);
+  return compressPdfFile(inputPath, outputPath, options, password);
 }

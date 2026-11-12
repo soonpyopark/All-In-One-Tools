@@ -2,9 +2,10 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { createCanvas } from '@napi-rs/canvas';
 import { PDFDocument } from 'pdf-lib';
-import { getDocument, GlobalWorkerOptions } from 'pdfjs-dist/legacy/build/pdf.mjs';
+import { getDocument, GlobalWorkerOptions, PasswordException } from 'pdfjs-dist/legacy/build/pdf.mjs';
 import { pathToFileURL } from 'node:url';
 import { fileURLToPath } from 'node:url';
+import { decryptPdfBytes } from '../pdf/passwords.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const pdfjsRoot = path.resolve(__dirname, '../../node_modules/pdfjs-dist');
@@ -181,6 +182,7 @@ function uniqueOutputPath(sourcePath, outputDir) {
  *   inputPath: string,
  *   mode?: 'consecutive' | 'global',
  *   similarityPercent?: number,
+ *   password?: string,
  *   signal?: AbortSignal,
  *   onProgress?: (ratio: number) => void,
  * }} args
@@ -196,16 +198,27 @@ export async function findDuplicatePageIndices(args) {
 
   const mode = args.mode === 'global' ? 'global' : 'consecutive';
   const threshold = percentToThreshold(args.similarityPercent ?? DEFAULT_SIMILARITY_PERCENT);
+  const password = String(args.password ?? '');
 
   args.onProgress?.(0.02);
   const fileBytes = fs.readFileSync(inputPath);
-  const loadingTask = getDocument({
-    data: new Uint8Array(fileBytes),
-    standardFontDataUrl,
-    disableFontFace: true,
-    useSystemFonts: true,
-  });
-  const pdf = await loadingTask.promise;
+  /** @type {import('pdfjs-dist').PDFDocumentProxy} */
+  let pdf;
+  try {
+    const loadingTask = getDocument({
+      data: new Uint8Array(fileBytes),
+      password,
+      standardFontDataUrl,
+      disableFontFace: true,
+      useSystemFonts: true,
+    });
+    pdf = await loadingTask.promise;
+  } catch (err) {
+    if (err instanceof PasswordException || /password/i.test(String(err?.name ?? err?.message ?? ''))) {
+      throw new Error('PDF 비밀번호가 올바르지 않습니다.');
+    }
+    throw err;
+  }
   try {
     if (args.signal?.aborted) throw new Error('작업이 취소되었습니다.');
     const pagesBefore = pdf.numPages;
@@ -232,6 +245,7 @@ export async function findDuplicatePageIndices(args) {
  *   outputDir?: string,
  *   mode?: 'consecutive' | 'global',
  *   similarityPercent?: number,
+ *   password?: string,
  *   signal?: AbortSignal,
  *   onProgress?: (ratio: number) => void,
  * }} args
@@ -242,6 +256,7 @@ export async function processPdfDedup(args) {
     String(args.outputDir ?? '').trim() || path.dirname(inputPath),
   );
   fs.mkdirSync(outputDir, { recursive: true });
+  const password = String(args.password ?? '');
 
   const found = await findDuplicatePageIndices(args);
   if (found.removedCount === 0) {
@@ -263,7 +278,9 @@ export async function processPdfDedup(args) {
     if (!removeSet.has(i)) keep.push(i);
   }
 
-  const srcDoc = await PDFDocument.load(fs.readFileSync(inputPath), { ignoreEncryption: true });
+  // pdf-lib 는 암호 해독이 없어, mupdf 로 푼 뒤 암호 없는 바이트를 넘깁니다.
+  const decrypted = decryptPdfBytes(inputPath, password);
+  const srcDoc = await PDFDocument.load(decrypted);
   const outDoc = await PDFDocument.create();
   const copied = await outDoc.copyPages(srcDoc, keep);
   for (const page of copied) outDoc.addPage(page);

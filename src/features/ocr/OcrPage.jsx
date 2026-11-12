@@ -4,6 +4,7 @@ import { api, getNative } from '../../lib/apiClient.js';
 import { useDialog } from '../../context/DialogContext.jsx';
 import { useReportJobRunning } from '../../context/JobActivityContext.jsx';
 import { useJobProgressScroll } from '../../hooks/useJobProgressScroll.js';
+import { collectPdfPasswords } from '../../lib/pdfPasswords.js';
 import { OCR_IMAGE_EXTS, OCR_INPUT_EXTS } from '../../../shared/ocrInputs.js';
 import {
   DEFAULT_OCR_LANGUAGE_IDS,
@@ -185,10 +186,19 @@ export default function OcrPage({ featureId } = {}) {
         });
         if (!ok) return;
       }
+      const unlocked = await collectPdfPasswords(
+        items.map((item) => item.path),
+        dialog,
+      );
+      if (unlocked.cancelled) return;
+      if (unlocked.paths.length === 0) {
+        void dialog.alert({ title: TITLE, body: '처리할 파일이 없습니다.' });
+        return;
+      }
       const res = await api('ocr.start', {
-        inputPaths: items.map((item) => item.path),
+        inputPaths: unlocked.paths,
         outputDir: outputDir.trim(),
-        options: { languages, skipNativeText },
+        options: { languages, skipNativeText, passwords: unlocked.passwords },
       });
       setJob(res.job);
     } catch (err) {

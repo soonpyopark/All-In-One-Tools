@@ -176,7 +176,7 @@ export default function StepEditor({ steps, onChange, activeIndex = -1, targets,
               {step.type === 'key' ? (
                 <>
                   <select className={inputSmClass} value={step.action} onChange={(event) => update(index, { action: event.target.value })} aria-label="키 동작">
-                    <option value="press">누르기</option>
+                    <option value="press">눌렀다 떼기</option>
                     <option value="down">누른 채 유지</option>
                     <option value="up">떼기</option>
                   </select>

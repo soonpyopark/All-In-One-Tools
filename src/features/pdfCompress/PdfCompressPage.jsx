@@ -12,6 +12,7 @@ import {
 import { useDialog } from '../../context/DialogContext.jsx';
 import { api, getNative } from '../../lib/apiClient.js';
 import { openExternalUrl } from '../../lib/openExternal.js';
+import { collectPdfPasswords } from '../../lib/pdfPasswords.js';
 import { TINY_PDF_EDITOR_URL } from '../../../shared/constants.js';
 
 function fileName(filePath) {
@@ -158,9 +159,16 @@ export default function PdfCompressPage() {
     setBusy(true);
     setLast(null);
     try {
+      const unlocked = await collectPdfPasswords(paths, dialog);
+      if (unlocked.cancelled) return;
+      if (unlocked.paths.length === 0) {
+        void dialog.alert({ title: TITLE, body: '처리할 PDF가 없습니다.' });
+        return;
+      }
       const res = await api('pdf.compress.run', {
-        inputPaths: paths,
+        inputPaths: unlocked.paths,
         outputDir: outputDir.trim(),
+        passwords: unlocked.passwords,
         options: { imageDpi, imageQualityPercent, imageSizePercent },
       });
       setLast({ results: res?.results ?? [], errors: res?.errors ?? [] });

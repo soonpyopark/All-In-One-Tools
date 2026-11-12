@@ -7,6 +7,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import * as mupdf from 'mupdf';
 import { PDFDocument } from 'pdf-lib';
+import { openPdfDocument } from '../pdf/passwords.js';
 import sharp from 'sharp';
 import { isOcrImagePath, isOcrInputPath } from '../../shared/ocrInputs.js';
 import { resolveOcrModelIds } from '../../shared/ocrLanguages.js';
@@ -168,6 +169,7 @@ function appendInvisibleText(doc, page, lines, zoom) {
  *   outputDir?: string,
  *   languages?: string[],
  *   skipNativeText?: boolean,
+ *   password?: string,
  *   signal?: AbortSignal,
  *   onProgress?: (ratio: number) => void,
  *   onLog?: (line: string) => void,
@@ -204,12 +206,7 @@ export async function processPdfOcr(options) {
     bytes = fs.readFileSync(inputPath);
   }
 
-  const doc = mupdf.Document.openDocument(bytes, 'application/pdf');
-  if (!(doc instanceof mupdf.PDFDocument) && !doc.isPDF?.()) {
-    throw new Error('PDF 문서가 아닙니다.');
-  }
-  /** @type {mupdf.PDFDocument} */
-  const pdf = /** @type {any} */ (doc);
+  const pdf = openPdfDocument(bytes, fromImage ? '' : String(options.password ?? ''));
 
   const pageCount = pdf.countPages();
   const zoom = OCR_DPI / 72;

@@ -2,6 +2,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
 import { isOcrInputPath } from '../../shared/ocrInputs.js';
+import { passwordForPath } from '../pdf/passwords.js';
 import { processPdfOcr } from './pdfOcr.js';
 
 /**
@@ -66,6 +67,7 @@ async function runJob(job) {
   job.state = 'running';
   job.updatedAt = Date.now();
   const options = /** @type {Record<string, unknown>} */ (job.result?.options || {});
+  const passwords = options.passwords;
   const logs = [];
 
   try {
@@ -82,6 +84,7 @@ async function runJob(job) {
         outputDir: job.outputDir || undefined,
         languages: Array.isArray(options.languages) ? options.languages.map(String) : ['korean', 'english'],
         skipNativeText: options.skipNativeText !== false,
+        password: passwordForPath(passwords, inputPath),
         signal: controller.signal,
         onProgress: (ratio) => {
           const base = i / job.inputPaths.length;
