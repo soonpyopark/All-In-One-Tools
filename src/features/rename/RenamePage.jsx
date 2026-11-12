@@ -1058,7 +1058,7 @@ export default function RenamePage() {
 
   return (
     <div
-      className="flex h-full flex-col gap-3 overflow-auto px-4 py-4"
+      className="flex h-full flex-col gap-3 overflow-auto px-6 py-6"
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => event.preventDefault()}
     >
