@@ -2,7 +2,13 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Section, btnClass, btnPrimaryClass, inputClass } from '../../components/settings/ui.jsx';
 import { useDialog } from '../../context/DialogContext.jsx';
 import { api, getNative } from '../../lib/apiClient.js';
+import { canResolveDroppedFiles, pathsFromDropEvent } from '../../lib/dropPaths.js';
 import { showExportDone } from '../../lib/exportDone.jsx';
+
+/** 탐색기·바탕화면에서 파일을 끌어오는 중인지 */
+function isExternalFileDrag(event) {
+  return [...(event.dataTransfer?.types ?? [])].includes('Files');
+}
 
 /**
  * @typedef {{
@@ -219,6 +225,8 @@ export default function LauncherPage() {
   const didDragRef = useRef(false);
   const [draggingId, setDraggingId] = useState(/** @type {string | null} */ (null));
   const [overId, setOverId] = useState(/** @type {string | null} */ (null));
+  const [fileDropOver, setFileDropOver] = useState(false);
+  const [addingDrops, setAddingDrops] = useState(false);
 
   useEffect(() => {
     let alive = true;
@@ -288,6 +296,50 @@ export default function LauncherPage() {
     const [moved] = next.splice(from, 1);
     next.splice(to, 0, moved);
     void persistOrder(next);
+  };
+
+  /** 바탕화면·탐색기에서 끌어다 놓은 바로가기·파일·폴더를 종류별로 바로 추가합니다. */
+  const addDroppedFiles = async (event) => {
+    setFileDropOver(false);
+    if (addingDrops) return;
+    if (!canResolveDroppedFiles()) {
+      void dialog.alert({
+        title: '런처',
+        body: '파일 끌어놓기를 쓰려면 앱을 다시 시작해 주세요.',
+      });
+      return;
+    }
+    const paths = pathsFromDropEvent(event);
+    if (paths.length === 0) return;
+
+    setAddingDrops(true);
+    try {
+      const res = await api('launcher.addFromPaths', { paths });
+      setItems(Array.isArray(res?.items) ? res.items : items);
+      const added = Number(res?.added) || 0;
+      const skipped = Number(res?.skipped) || 0;
+      const failures = Array.isArray(res?.failures) ? res.failures : [];
+      if (added === 0 && failures.length > 0) {
+        void dialog.alert({
+          title: '추가 실패',
+          body: failures.slice(0, 5).join('\n'),
+        });
+      } else if (added > 0 && (skipped > 0 || failures.length > 0)) {
+        void dialog.alert({
+          title: '일부 추가됨',
+          body: `${added}개 추가 · 건너뜀 ${skipped}개${
+            failures.length ? `\n${failures.slice(0, 3).join('\n')}` : ''
+          }`,
+        });
+      }
+    } catch (err) {
+      void dialog.alert({
+        title: '추가 실패',
+        body: err instanceof Error ? err.message : '끌어다 놓은 항목을 추가하지 못했습니다.',
+      });
+    } finally {
+      setAddingDrops(false);
+    }
   };
 
   const openItem = async (item) => {
@@ -477,13 +529,44 @@ export default function LauncherPage() {
   };
 
   return (
-    <div className="h-full overflow-auto px-6 py-6">
+    <div
+      className={`relative h-full overflow-auto px-6 py-6 ${
+        fileDropOver ? 'bg-app-accentSoft/30' : ''
+      }`}
+      onDragEnter={(event) => {
+        if (!isExternalFileDrag(event)) return;
+        event.preventDefault();
+        setFileDropOver(true);
+      }}
+      onDragOver={(event) => {
+        if (!isExternalFileDrag(event)) return;
+        event.preventDefault();
+        event.dataTransfer.dropEffect = 'copy';
+        setFileDropOver(true);
+      }}
+      onDragLeave={(event) => {
+        if (event.currentTarget.contains(/** @type {Node} */ (event.relatedTarget))) return;
+        setFileDropOver(false);
+      }}
+      onDrop={(event) => {
+        if (!isExternalFileDrag(event)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        void addDroppedFiles(event);
+      }}
+    >
+      {fileDropOver ? (
+        <div className="pointer-events-none absolute inset-3 z-20 flex items-center justify-center rounded-xl border-2 border-dashed border-app-accent bg-app-accentSoft/80 text-sm font-medium text-app-accentText">
+          {addingDrops ? '추가하는 중…' : '놓으면 종류를 구분해 바로가기에 추가합니다'}
+        </div>
+      ) : null}
       <div className="space-y-5">
         <section className="flex flex-wrap items-end justify-between gap-3">
           <div>
             <h1 className="m-0 text-xl font-semibold text-slate-900">런처</h1>
             <p className="mt-1 text-sm text-slate-500">
-              자주 쓰는 프로그램·웹사이트·폴더·파일을 바로 엽니다. 업무/개인 그룹과 검색을 지원합니다.
+              자주 쓰는 프로그램·웹사이트·폴더·파일을 바로 엽니다. 바탕화면 바로가기를 이 화면으로 끌어다 놓아도
+              추가됩니다.
             </p>
           </div>
           <div className="flex flex-wrap gap-2">
@@ -626,7 +709,10 @@ export default function LauncherPage() {
         {loading ? (
           <p className="text-sm text-slate-500">불러오는 중…</p>
         ) : items.length === 0 ? (
-          <Section title="바로가기 없음" description="위 버튼으로 프로그램·웹사이트·폴더·파일을 추가하세요.">
+          <Section
+            title="바로가기 없음"
+            description="위 버튼으로 추가하거나, 바탕화면·탐색기의 바로가기·파일·폴더를 여기로 끌어다 놓으세요."
+          >
             <p className="m-0 text-sm text-slate-500">추가한 항목은 이 PC의 데이터 폴더에 저장됩니다.</p>
           </Section>
         ) : filteredItems.length === 0 ? (
@@ -651,6 +737,13 @@ export default function LauncherPage() {
                         : 'border-solid border-app-border'
                   }`}
                   onDragOver={(event) => {
+                    if (isExternalFileDrag(event)) {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      event.dataTransfer.dropEffect = 'copy';
+                      setFileDropOver(true);
+                      return;
+                    }
                     if (!dragIdRef.current) return;
                     event.preventDefault();
                     event.dataTransfer.dropEffect = 'move';
@@ -661,6 +754,12 @@ export default function LauncherPage() {
                     setOverId((current) => (current === item.id ? null : current));
                   }}
                   onDrop={(event) => {
+                    if (isExternalFileDrag(event)) {
+                      event.preventDefault();
+                      event.stopPropagation();
+                      void addDroppedFiles(event);
+                      return;
+                    }
                     event.preventDefault();
                     const fromId = dragIdRef.current || event.dataTransfer.getData('text/launcher-id');
                     moveBefore(fromId, item.id);

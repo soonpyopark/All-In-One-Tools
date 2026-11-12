@@ -7,7 +7,9 @@ import path from 'node:path';
 import { BrowserWindow, app, dialog, shell } from 'electron';
 import { APP_NAME } from '../../shared/constants.js';
 import { ApiError, defineApi } from '../api/registry.js';
+import { resolveDroppedPath } from '../launcher/resolveDrop.js';
 import {
+  addLauncherItems,
   listLauncherItems,
   removeLauncherItem,
   saveLauncherItems,
@@ -73,6 +75,55 @@ export function register() {
     try {
       const items = await upsertLauncherItem(body?.item ?? body);
       return { items };
+    } catch (err) {
+      throw new ApiError(err instanceof Error ? err.message : String(err));
+    }
+  });
+
+  /** 탐색기·바탕화면에서 끌어다 놓은 경로들을 종류별로 바로 추가합니다. */
+  defineApi('launcher.addFromPaths', async (body) => {
+    const paths = Array.isArray(body?.paths)
+      ? body.paths.map((entry) => String(entry ?? '').trim()).filter(Boolean)
+      : [];
+    if (paths.length === 0) throw new ApiError('추가할 항목이 없습니다.');
+
+    /** @type {unknown[]} */
+    const drafts = [];
+    /** @type {string[]} */
+    const failures = [];
+
+    for (const filePath of paths.slice(0, 50)) {
+      try {
+        const resolved = resolveDroppedPath(filePath);
+        drafts.push({
+          type: resolved.type,
+          title: resolved.title,
+          target: resolved.target,
+          group: 'general',
+        });
+      } catch (err) {
+        failures.push(
+          `${path.basename(filePath)}: ${err instanceof Error ? err.message : String(err)}`,
+        );
+      }
+    }
+
+    if (drafts.length === 0) {
+      throw new ApiError(
+        failures.length > 0
+          ? `추가하지 못했습니다.\n${failures.slice(0, 5).join('\n')}`
+          : '추가할 항목이 없습니다.',
+      );
+    }
+
+    try {
+      const result = await addLauncherItems(drafts);
+      return {
+        items: result.items,
+        added: result.added,
+        skipped: result.skipped + failures.length,
+        failures: failures.slice(0, 8),
+      };
     } catch (err) {
       throw new ApiError(err instanceof Error ? err.message : String(err));
     }

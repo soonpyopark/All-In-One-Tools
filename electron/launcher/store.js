@@ -212,4 +212,43 @@ export function removeLauncherItem(id) {
   });
 }
 
+/**
+ * 드롭으로 해석된 항목들을 끝에 추가합니다. (type+target 중복은 건너뜀)
+ * @param {unknown[]} rawItems
+ * @returns {Promise<{ items: LauncherItem[], added: number, skipped: number }>}
+ */
+export function addLauncherItems(rawItems) {
+  return withFileLock(statePath(LAUNCHER_FILE), () => {
+    const state = ensureBuiltinDefaultsUnlocked();
+    const current = [...state.items];
+    const seen = new Set(current.map((item) => `${item.type}\0${item.target}`));
+    let added = 0;
+    let skipped = 0;
+    const list = Array.isArray(rawItems) ? rawItems : [];
+
+    for (const raw of list) {
+      const item = normalizeItem({ ...(raw && typeof raw === 'object' ? raw : {}), id: undefined });
+      if (!item) {
+        skipped += 1;
+        continue;
+      }
+      const key = `${item.type}\0${item.target}`;
+      if (seen.has(key)) {
+        skipped += 1;
+        continue;
+      }
+      if (current.length >= 200) {
+        skipped += 1;
+        continue;
+      }
+      seen.add(key);
+      current.push(item);
+      added += 1;
+    }
+
+    writeLauncherState(current, Math.max(state.defaultsVersion, DEFAULTS_VERSION));
+    return { items: current, added, skipped };
+  });
+}
+
 export { TYPE_ICONS };
