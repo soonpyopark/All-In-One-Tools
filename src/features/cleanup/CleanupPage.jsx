@@ -44,7 +44,7 @@ function batchTone(state) {
 /**
  * 정리 화면. `tool` 로 어떤 작업을 보여 줄지 정합니다.
  *  - `ebook-extract` : 이미지 자르기 & PDF 저장 (스크린샷에서 이북 영역 등을 추출)
- *  - `pdf-dedup`     : PDF 중복페이지 자동 정리
+ *  - `pdf-dedup`     : PDF 중복페이지 정리
  *
  * @param {{ tool?: 'ebook-extract' | 'pdf-dedup', featureId?: string }} props
  */
@@ -53,7 +53,7 @@ export default function CleanupPage({ tool = 'ebook-extract', featureId } = {}) 
   const native = getNative();
   const { data, loading, error, reload } = useLoad(() => api('cleanup.tools'));
 
-  const pageTitle = tool === 'pdf-dedup' ? 'PDF 중복페이지 자동 정리' : '이미지 자르기 & PDF 저장';
+  const pageTitle = tool === 'pdf-dedup' ? 'PDF 중복페이지 정리' : '이미지 자르기 & PDF 저장';
   // 저장 폴더는 화면(작업)마다 따로 기억합니다.
   const outputKey = tool === 'pdf-dedup' ? 'pdfDedupOutput' : 'cleanupOutput';
   const tools = data?.tools ?? [];

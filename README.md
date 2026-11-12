@@ -4,7 +4,7 @@
 
 ![실행 화면](assets-src/screenshot-home.png)
 
-로컬 전용 Electron 도구 모음(매크로 & 화면 캡처(화면·창·영역 캡처, 키보드·마우스 매크로 프리셋), 이미지 자르기 & PDF 저장, PDF 중복페이지 자동 정리, PDF & 이미지 OCR, PDF 용량 줄이기, 파일명 일괄 변경, Movie2GIF 변환, GIF 이어붙이기, QR 코드 생성기, 피치 & 볼륨 조절, 서브넷 계산기, 런처, 시간 & 알람). PDF 페이지 순서·합치기·서명 등 편집은 [Tiny PDF Editor](https://github.com/soonpyopark/Tiny-PDF-Editor) 를 사용합니다. 런처에는 [출장 경로 찾기(Path Finder)](https://pathfinder-eight-pearl.vercel.app/) 기본 바로가기가 포함됩니다. 로그인·회원·웹 접속 없이 이 PC에서만 동작하며, **기능만 추가**하면 된다.
+로컬 전용 Electron 도구 모음(매크로 & 화면 캡처(화면·창·영역 캡처, 키보드·마우스 매크로 프리셋), 이미지 자르기 & PDF 저장, PDF 중복페이지 정리, OCR 변환(PDF & 이미지), PDF 용량 줄이기, 파일명 일괄 변경, Movie2GIF 변환, GIF 이어붙이기, QR 코드 생성기, 피치 & 볼륨 조절, 서브넷 계산기, 런처, 시간 & 알람). PDF 페이지 순서·합치기·서명 등 편집은 [Tiny PDF Editor](https://github.com/soonpyopark/Tiny-PDF-Editor) 를 사용합니다. 런처에는 [출장 경로 찾기(Path Finder)](https://pathfinder-eight-pearl.vercel.app/) 기본 바로가기가 포함됩니다. 로그인·회원·웹 접속 없이 이 PC에서만 동작하며, **기능만 추가**하면 된다.
 
 ## 명령
 
@@ -31,9 +31,9 @@
 - `main.js`, `preload.cjs` — Electron 진입점 (API 호출과 파일/폴더 선택 등 네이티브 기능은 preload 로 노출, 메인에서 요청 출처 검증)
 - `electron/devRenderer.js` — 개발 시 화면을 `.dev-dist/` 로 감시 빌드 (운영은 `dist/` 를 파일로 로드)
 - `electron/api/coreApi.js` — 기본 API (앱 정보, 설정, 업데이트 확인)
-- `electron/modules/*` — 기능별 API (변환, 이미지 자르기·PDF 저장·PDF 정리, PDF & 이미지 OCR, QR 코드 생성기, 매크로 & 화면 캡처, 파일명 일괄 변경)
+- `electron/modules/*` — 기능별 API (변환, 이미지 자르기·PDF 저장·PDF 정리, OCR 변환(PDF & 이미지), QR 코드 생성기, 매크로 & 화면 캡처, 파일명 일괄 변경)
 - QR 코드 생성기: Tiny QRcode Generator 와 같이 보내기(텍스트·URL → 단색 QR, 긴 텍스트 QRT1 압축) / 받기(화면 영역 드래그 → QR 인식)를 지원한다.
-- PDF & 이미지 OCR: Tiny PDF Editor 와 같은 PP-OCRv5 ONNX(`electron/ocr/`)로 검색 가능 글자 층을 붙인다. 이미지는 PDF 로 변환한 뒤 OCR 한다. 기본 한국어·영어, 다른 언어는 옵션(모델 다운로드). 모델은 `ocr/models/` (`npm run prepare:ocr`).
+- OCR 변환(PDF & 이미지): Tiny PDF Editor 와 같은 PP-OCRv5 ONNX(`electron/ocr/`)로 검색 가능 글자 층을 붙인다. 이미지는 PDF 로 변환한 뒤 OCR 한다. 기본 한국어·영어, 다른 언어는 옵션(모델 다운로드). 모델은 `ocr/models/` (`npm run prepare:ocr`).
 - 파일명 일괄 변경: 이름 변환은 화면(`src/features/rename/ops.js`)에서 미리보기로 만들고, 실제 변경은 `rename.apply`(`electron/modules/rename.js`)가 전부 검증한 뒤 임시 이름을 거쳐 적용한다. 마지막 적용은 "실행 취소"로 되돌릴 수 있다.
 - `electron/capture/*` — 매크로 & 화면 캡처: 화면·창·영역 캡처(`screenCapture.js`), 영역 선택 오버레이(`regionPicker.*`), 매크로 실행기(`macroRunner.js`, 키보드·마우스는 nut.js), 프리셋 저장(`presets.js` → `macros.json`)
 - `electron/settingsService.js` — 설정 저장
@@ -69,4 +69,4 @@
 
 이 프로젝트는 [GNU Affero General Public License v3.0](https://www.gnu.org/licenses/agpl-3.0.html)(**AGPL-3.0**)으로 배포된다. 전문은 저장소 루트의 `LICENSE`를 본다.
 
-PDF & 이미지 OCR 경로에서 [MuPDF](https://mupdf.com/)(`mupdf`, AGPL-3.0-or-later)를 사용하므로, 바이너리를 배포할 때는 AGPL에 따른 **대응 소스 공개·고지** 의무를 함께 지킨다. PP-OCRv5 ONNX 모델은 Apache-2.0이다.
+OCR 변환(PDF & 이미지) 경로에서 [MuPDF](https://mupdf.com/)(`mupdf`, AGPL-3.0-or-later)를 사용하므로, 바이너리를 배포할 때는 AGPL에 따른 **대응 소스 공개·고지** 의무를 함께 지킨다. PP-OCRv5 ONNX 모델은 Apache-2.0이다.

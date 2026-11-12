@@ -1,4 +1,4 @@
-/** PDF & 이미지 OCR 이 받을 수 있는 확장자. */
+/** OCR 변환(PDF & 이미지)이 받을 수 있는 확장자. */
 export const OCR_IMAGE_EXTS = ['.png', '.jpg', '.jpeg', '.webp', '.bmp', '.tif', '.tiff', '.gif'];
 export const OCR_INPUT_EXTS = ['.pdf', ...OCR_IMAGE_EXTS];
 

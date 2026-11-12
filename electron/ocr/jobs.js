@@ -155,7 +155,7 @@ export function startOcrJob(body) {
   /** @type {OcrJob} */
   const job = {
     id,
-    label: 'PDF & 이미지 OCR',
+    label: 'OCR 변환(PDF & 이미지)',
     inputPaths,
     outputDir,
     state: 'queued',

@@ -21,7 +21,7 @@ import {
   inputClass,
 } from '../../components/settings/ui.jsx';
 
-const TITLE = 'PDF & 이미지 OCR';
+const TITLE = 'OCR 변환(PDF & 이미지)';
 const PICK_EXTS = OCR_INPUT_EXTS.map((ext) => ext.replace(/^\./, ''));
 const IMAGE_LABEL = OCR_IMAGE_EXTS.map((ext) => ext.replace(/^\./, '')).join(', ');
 

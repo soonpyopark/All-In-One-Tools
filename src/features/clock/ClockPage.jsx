@@ -1,7 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Section, btnClass, btnPrimaryClass, inputClass } from '../../components/settings/ui.jsx';
 import { useDialog } from '../../context/DialogContext.jsx';
-import { api } from '../../lib/apiClient.js';
+import { api, getNative } from '../../lib/apiClient.js';
+import { showExportDone } from '../../lib/exportDone.jsx';
 
 /**
  * @typedef {{
@@ -47,6 +48,7 @@ function formatDuration(ms) {
 /** 시간 & 알람: 시계 · 타이머 · 알람. */
 export default function ClockPage() {
   const dialog = useDialog();
+  const native = getNative();
   const [now, setNow] = useState(() => new Date());
   const [alarms, setAlarms] = useState(/** @type {AlarmItem[]} */ ([]));
   const [timer, setTimer] = useState(/** @type {TimerState} */ ({ running: false, remainingMs: 0, durationMs: 0 }));
@@ -217,9 +219,11 @@ export default function ClockPage() {
     try {
       const res = await api('clock.alarms.export');
       if (res?.cancelled) return;
-      void dialog.alert({
-        title: '내보내기 완료',
-        body: `${res?.count ?? 0}개 알람을 저장했습니다.\n${res?.filePath ?? ''}`,
+      await showExportDone({
+        dialog,
+        native,
+        summary: `${res?.count ?? 0}개 알람을 저장했습니다.`,
+        filePath: res?.filePath,
       });
     } catch (err) {
       void dialog.alert({

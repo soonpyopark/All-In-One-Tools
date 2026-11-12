@@ -1,5 +1,5 @@
 /**
- * PDF & 이미지 OCR 언어 목록.
+ * OCR 변환(PDF & 이미지) 언어 목록.
  * Tiny PDF Editor 와 같이 PP-OCRv5 ONNX 인식 모델을 쓰며, 기본은 한국어 모델(영문 포함)입니다.
  */
 

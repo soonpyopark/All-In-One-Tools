@@ -47,7 +47,9 @@ function writeSidebarCollapsed(collapsed) {
 }
 
 const floatingButtonClass =
-  'inline-flex items-center justify-center rounded-md p-1.5 transition active:scale-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-accent/40';
+  'inline-flex h-8 w-8 shrink-0 items-center justify-center rounded-md p-0 transition active:scale-90 focus:outline-none focus-visible:ring-2 focus-visible:ring-app-accent/40';
+
+const floatingIconClass = 'h-4 w-4 shrink-0';
 
 /**
  * 활성 기능 페이지 스크롤 컨테이너를 찾습니다.
@@ -395,10 +397,24 @@ function AppShellInner() {
               aria-label="홈으로"
               onClick={() => goTo(features[0].id)}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <svg className={floatingIconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M3 11.5 12 4l9 7.5" />
                 <path d="M5.5 10v9.5h13V10" />
                 <path d="M10 19.5v-5h4v5" />
+              </svg>
+            </button>
+            <button
+              type="button"
+              className={`${floatingButtonClass} text-orange-500 hover:bg-orange-50 hover:text-orange-600`}
+              title="런처"
+              aria-label="런처"
+              onClick={() => goTo('launcher')}
+            >
+              <svg className={floatingIconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+                <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />
+                <path d="m12 15-3-3a22 22 0 0 1 2-3.95A12.88 12.88 0 0 1 22 2c0 2.72-.78 7.5-6 11a22.35 22.35 0 0 1-4 2z" />
+                <path d="M9 12H4s.55-3.03 2-4c1.62-1.08 5 0 5 0" />
+                <path d="M12 15v5s3.03-.55 4-2c1.08-1.62 0-5 0-5" />
               </svg>
             </button>
             <button
@@ -408,7 +424,7 @@ function AppShellInner() {
               aria-label="화면 초기화"
               onClick={() => void resetPage()}
             >
-              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
+              <svg className={floatingIconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M3.5 9a9 9 0 0 1 14.85-3.36L22 9.5" />
                 <path d="M22 3.5v6h-6" />
                 <path d="M20.5 15a9 9 0 0 1-14.85 3.36L2 14.5" />
@@ -422,7 +438,7 @@ function AppShellInner() {
               aria-label="맨 위로"
               onClick={scrollToTop}
             >
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden="true">
+              <svg className={floatingIconClass} viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinejoin="round" aria-hidden="true">
                 <path d="M12 6 20 18H4Z" />
               </svg>
             </button>
@@ -439,12 +455,10 @@ function AppShellInner() {
               onClick={handleAlwaysOnTop}
             >
               <svg
-                width="16"
-                height="16"
+                className={`${floatingIconClass} transition-transform ${alwaysOnTop ? 'rotate-45' : ''}`}
                 viewBox="0 0 24 24"
                 fill="currentColor"
                 aria-hidden="true"
-                className={`transition-transform ${alwaysOnTop ? 'rotate-45' : ''}`}
               >
                 <path d="M16 9V4h1V2H7v2h1v5l-2 2v2h5.2v7h1.6v-7H18v-2l-2-2zm-1.5 2H14V4h-4v7H9.5l1.5 1.5L12.5 11z" />
               </svg>

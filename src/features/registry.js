@@ -58,7 +58,7 @@ export const FEATURES = [
   },
   {
     id: 'pdf-ocr',
-    label: 'PDF & 이미지 OCR',
+    label: 'OCR 변환(PDF & 이미지)',
     icon: '🔤',
     description: '스캔 PDF·이미지에 검색 가능한 글자 층을 붙입니다. 이미지는 PDF 로 변환한 뒤 OCR 합니다. 기본 한국어·영어.',
     color: ['#38bdf8', '#0284c7'],
@@ -74,7 +74,7 @@ export const FEATURES = [
   },
   {
     id: 'pdf-dedup',
-    label: 'PDF 중복페이지 자동 정리',
+    label: 'PDF 중복페이지 정리',
     icon: '🧹',
     description: 'PDF 에서 비슷한 페이지를 찾아 제거합니다. (연속 / 문서 전체)',
     color: ['#2dd4bf', '#0f9488'],

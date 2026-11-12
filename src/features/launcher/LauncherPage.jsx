@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Section, btnClass, btnPrimaryClass, inputClass } from '../../components/settings/ui.jsx';
 import { useDialog } from '../../context/DialogContext.jsx';
 import { api, getNative } from '../../lib/apiClient.js';
+import { showExportDone } from '../../lib/exportDone.jsx';
 
 /**
  * @typedef {{
@@ -203,6 +204,7 @@ function blankDraft(type) {
  */
 export default function LauncherPage() {
   const dialog = useDialog();
+  const native = getNative();
   const [items, setItems] = useState(/** @type {LauncherItem[]} */ ([]));
   const [loading, setLoading] = useState(true);
   const [busyId, setBusyId] = useState(/** @type {string | null} */ (null));
@@ -424,9 +426,11 @@ export default function LauncherPage() {
     try {
       const res = await api('launcher.exportBackup');
       if (res?.cancelled) return;
-      void dialog.alert({
-        title: '내보내기 완료',
-        body: `${res?.count ?? 0}개 항목을 저장했습니다.\n${res?.filePath ?? ''}`,
+      await showExportDone({
+        dialog,
+        native,
+        summary: `${res?.count ?? 0}개 항목을 저장했습니다.`,
+        filePath: res?.filePath,
       });
     } catch (err) {
       void dialog.alert({
