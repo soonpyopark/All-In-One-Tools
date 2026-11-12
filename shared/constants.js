@@ -22,7 +22,7 @@ export const APP_VERSION = '1.0.0';
  * Package build id (YYMMDD_HHMMSS). Rewritten by `npm run build:release*`
  * (scripts/sync-build-stamp.mjs); matches the suffix of the produced files.
  */
-export const APP_BUILD_STAMP = '261111_190854';
+export const APP_BUILD_STAMP = '261112_110421';
 
 /**
  * GitHub repository (`owner/repo`) whose latest release is used by the
