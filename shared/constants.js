@@ -16,7 +16,7 @@ export const APP_USER_MODEL_ID = 'com.alltools.app';
 /** File-system friendly name used in installer / archive file names. */
 export const APP_FILE_NAME = 'AllTools';
 
-export const APP_VERSION = '1.0.0';
+export const APP_VERSION = '1.0.1';
 
 /**
  * Package build id (YYMMDD_HHMMSS). Rewritten by `npm run build:release*`

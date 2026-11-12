@@ -1,7 +1,7 @@
 {
   "name": "all-tools",
   "productName": "AllTools",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "All-Tools: Electron app with video-to-GIF conversion and extensible tools.",
   "main": "main.js",
   "type": "module",
