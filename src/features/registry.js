@@ -3,6 +3,7 @@
  *
  * 새 기능 화면은 `src/features/<id>/` 에 만들고 아래 배열에 한 줄만 추가하면
  * 사이드바 메뉴와 본문 영역에 자동으로 붙습니다. (기능이 2개 이상이면 사이드바 표시)
+ * `platforms: ['win32']` 처럼 지정하면 해당 OS 빌드에서만 메뉴에 나타납니다.
  * 서버 쪽 API 는 `electron/modules/` 에 등록합니다.
  *
  * @typedef {{
@@ -11,6 +12,7 @@
  *   icon?: string,
  *   description?: string,
  *   color?: [string, string],
+ *   platforms?: string[],
  *   component: import('react').ComponentType,
  * }} FeatureDefinition
  */
@@ -28,6 +30,7 @@ import PdfCompressPage from './pdfCompress/PdfCompressPage.jsx';
 import QrPage from './qr/QrPage.jsx';
 import RenamePage from './rename/RenamePage.jsx';
 import SubnetPage from './subnet/SubnetPage.jsx';
+import WindowsSystemPage from './windowsSystem/WindowsSystemPage.jsx';
 
 /** @type {FeatureDefinition[]} */
 export const FEATURES = [
@@ -135,5 +138,14 @@ export const FEATURES = [
     description: '현재 시각, 타이머, 알람을 사용합니다. 다른 메뉴에 있어도 알림이 울립니다.',
     color: ['#67e8f9', '#0891b2'],
     component: ClockPage,
+  },
+  {
+    id: 'windows-system',
+    label: 'Windows 시스템 관리',
+    icon: '🪟',
+    description: '제어판·컴퓨터관리·서비스·작업 스케줄러 바로가기, 화면보호기 끄기, Windows 비밀번호 변경(Windows 전용).',
+    color: ['#60a5fa', '#2563eb'],
+    platforms: ['win32'],
+    component: WindowsSystemPage,
   },
 ];

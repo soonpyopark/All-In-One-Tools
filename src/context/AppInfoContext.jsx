@@ -11,6 +11,7 @@ import { createContext, useContext } from 'react';
  *   buildStampLabel: string,
  *   updateConfigured: boolean,
  *   accentColor: string,
+ *   platform?: string,
  * }} AppInfo
  */
 

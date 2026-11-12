@@ -1084,27 +1084,35 @@ export default function RenamePage() {
             ))}
           </aside>
 
-          {/* 가운데 목록 */}
+          {/* 가운데 목록 — 열 전체(빈 화면·목록 모두)가 끌어다 놓기 영역 */}
           <div
             tabIndex={0}
             onKeyDown={onTableKeyDown}
+            onDragEnter={(event) => {
+              event.preventDefault();
+              event.stopPropagation();
+              setDragOver(true);
+            }}
             onDragOver={(event) => {
               event.preventDefault();
               event.stopPropagation();
               setDragOver(true);
             }}
-            onDragLeave={() => setDragOver(false)}
+            onDragLeave={(event) => {
+              if (event.currentTarget.contains(/** @type {Node} */ (event.relatedTarget))) return;
+              setDragOver(false);
+            }}
             onDrop={(event) => {
               event.stopPropagation();
               onDropFiles(event);
             }}
-            className={`relative min-w-0 flex-1 overflow-auto outline-none ${
+            className={`relative flex min-w-0 flex-1 flex-col overflow-auto outline-none ${
               dragOver ? 'bg-app-accentSoft/40' : hasItems ? 'bg-white' : 'bg-slate-50/50'
             }`}
           >
             {!hasItems ? (
               <div
-                className={`m-3 flex min-h-[16rem] flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed px-6 text-center ${
+                className={`flex min-h-0 flex-1 flex-col items-center justify-center gap-3 border-2 border-dashed px-6 text-center ${
                   dragOver
                     ? 'border-app-accent bg-app-accentSoft text-app-accentText'
                     : 'border-slate-200 bg-white text-slate-500'

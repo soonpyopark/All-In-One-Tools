@@ -432,7 +432,7 @@ export default function AdjustPage({ featureId } = {}) {
                   <button
                     key={stage.stage}
                     type="button"
-                    className={`${btnClass} !px-2 !py-1 text-xs ${
+                    className={`${btnClass} ${
                       pitchStage === stage.stage ? '!bg-app-accent !text-white' : ''
                     }`}
                     onClick={() => setPitchStage(stage.stage)}

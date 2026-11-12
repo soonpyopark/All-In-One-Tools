@@ -82,12 +82,36 @@ function AppShellInner() {
   const [resetKeys, setResetKeys] = useState(/** @type {Record<string, number>} */ ({}));
 
   const [featureOrder, setFeatureOrder] = useState(/** @type {string[]} */ ([]));
-  const features = useMemo(() => orderFeatures(FEATURES, featureOrder), [featureOrder]);
+  /** Windows 전용 메뉴 등은 현재 OS 에 맞게 걸러냅니다. */
+  const platformFeatures = useMemo(() => {
+    const platform = appInfo?.platform || (typeof process !== 'undefined' ? process.platform : '');
+    return FEATURES.filter(
+      (feature) => !feature.platforms?.length || feature.platforms.includes(platform),
+    );
+  }, [appInfo?.platform]);
+  const features = useMemo(
+    () => orderFeatures(platformFeatures, featureOrder),
+    [platformFeatures, featureOrder],
+  );
   const [activeId, setActiveId] = useState(FEATURES[0]?.id ?? '');
   const active = features.find((feature) => feature.id === activeId) ?? features[0];
 
   /** 한 번이라도 연 메뉴는 마운트 유지(작업·입력 목록 보존). */
   const [mountedIds, setMountedIds] = useState(() => new Set([FEATURES[0]?.id].filter(Boolean)));
+
+  useEffect(() => {
+    // 플랫폼에 없는 메뉴가 활성/마운트에 남아 있으면 홈으로 되돌립니다.
+    if (!activeId) return;
+    if (features.some((feature) => feature.id === activeId)) return;
+    const fallback = features[0]?.id;
+    if (!fallback) return;
+    setActiveId(fallback);
+    setMountedIds((prev) => {
+      const next = new Set([...prev].filter((id) => features.some((feature) => feature.id === id)));
+      next.add(fallback);
+      return next;
+    });
+  }, [activeId, features]);
 
   useEffect(() => {
     let alive = true;

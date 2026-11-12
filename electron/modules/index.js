@@ -15,9 +15,22 @@ import * as ocr from './ocr.js';
 import * as pdfTools from './pdfTools.js';
 import * as qr from './qr.js';
 import * as rename from './rename.js';
+import * as windowsSystem from './windowsSystem.js';
 
 /** @type {{ register: () => void }[]} */
-const MODULES = [convert, cleanup, capture, rename, ocr, qr, files, launcher, clock, pdfTools];
+const MODULES = [
+  convert,
+  cleanup,
+  capture,
+  rename,
+  ocr,
+  qr,
+  files,
+  launcher,
+  clock,
+  pdfTools,
+  windowsSystem,
+];
 
 export function registerModules() {
   for (const mod of MODULES) mod.register();

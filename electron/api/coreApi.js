@@ -36,6 +36,8 @@ export function registerCoreApi() {
     buildStamp: APP_BUILD_STAMP,
     buildStampLabel: formatAppBuildStamp(APP_BUILD_STAMP),
     updateConfigured: Boolean(UPDATE_REPO),
+    /** 렌더러에서 Windows 전용 메뉴 등을 걸러 쓸 때 사용합니다. */
+    platform: process.platform,
     ...getPublicSettings(),
   }));
 
