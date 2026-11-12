@@ -40,7 +40,7 @@
     "vite": "^8.3.8"
   },
   "dependencies": {
-    "@napi-rs/canvas": "^1.1.0",
+    "@napi-rs/canvas": "^1.1.1",
     "@nuintun/qrcode": "^5.1.0",
     "@nut-tree-fork/nut-js": "^4.2.6",
     "fflate": "^0.8.3",
