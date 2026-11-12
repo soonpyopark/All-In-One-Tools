@@ -10,7 +10,7 @@ import { getPreset, listPresets, movePreset, normalizeTarget, removePreset, save
 import { pickRegion } from '../capture/regionPicker.js';
 import { captureTarget, listTargets, saveImage } from '../capture/screenCapture.js';
 
-/** 매크로 화면 캡처: 화면/창/영역 캡처와 키보드·마우스 매크로 프리셋. */
+/** 매크로 & 화면 캡처: 화면/창/영역 캡처와 키보드·마우스 매크로 프리셋. */
 
 const defaultOutputDir = () => path.join(app.getPath('pictures'), 'All In One Tools');
 

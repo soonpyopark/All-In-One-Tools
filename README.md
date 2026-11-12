@@ -4,7 +4,7 @@
 
 ![실행 화면](assets-src/screenshot-home.png)
 
-로컬 전용 Electron 도구 모음(매크로 화면 캡처(화면·창·영역 캡처, 키보드·마우스 매크로 프리셋), 이미지 자르기 & PDF 저장, PDF 중복페이지 정리, PDF & 이미지 OCR, 파일명 일괄 변경, Movie2GIF 변환, GIF 이어붙이기, QR 코드 생성기, 피치 & 볼륨 조절, 서브넷 계산기). 로그인·회원·웹 접속 없이 이 PC에서만 동작하며, **기능만 추가**하면 된다.
+로컬 전용 Electron 도구 모음(매크로 & 화면 캡처(화면·창·영역 캡처, 키보드·마우스 매크로 프리셋), 이미지 자르기 & PDF 저장, PDF 중복페이지 자동 정리, PDF & 이미지 OCR, PDF 용량 줄이기, 파일명 일괄 변경, Movie2GIF 변환, GIF 이어붙이기, QR 코드 생성기, 피치 & 볼륨 조절, 서브넷 계산기, 런처, 시간 & 알람). PDF 페이지 순서·합치기·서명 등 편집은 [Tiny PDF Editor](https://github.com/soonpyopark/Tiny-PDF-Editor) 를 사용합니다. 런처에는 [출장 경로 찾기(Path Finder)](https://pathfinder-eight-pearl.vercel.app/) 기본 바로가기가 포함됩니다. 로그인·회원·웹 접속 없이 이 PC에서만 동작하며, **기능만 추가**하면 된다.
 
 ## 명령
 
@@ -31,11 +31,11 @@
 - `main.js`, `preload.cjs` — Electron 진입점 (API 호출과 파일/폴더 선택 등 네이티브 기능은 preload 로 노출, 메인에서 요청 출처 검증)
 - `electron/devRenderer.js` — 개발 시 화면을 `.dev-dist/` 로 감시 빌드 (운영은 `dist/` 를 파일로 로드)
 - `electron/api/coreApi.js` — 기본 API (앱 정보, 설정, 업데이트 확인)
-- `electron/modules/*` — 기능별 API (변환, 이미지 자르기·PDF 저장·PDF 정리, PDF & 이미지 OCR, QR 코드 생성기, 매크로 화면 캡처, 파일명 일괄 변경)
+- `electron/modules/*` — 기능별 API (변환, 이미지 자르기·PDF 저장·PDF 정리, PDF & 이미지 OCR, QR 코드 생성기, 매크로 & 화면 캡처, 파일명 일괄 변경)
 - QR 코드 생성기: Tiny QRcode Generator 와 같이 보내기(텍스트·URL → 단색 QR, 긴 텍스트 QRT1 압축) / 받기(화면 영역 드래그 → QR 인식)를 지원한다.
 - PDF & 이미지 OCR: Tiny PDF Editor 와 같은 PP-OCRv5 ONNX(`electron/ocr/`)로 검색 가능 글자 층을 붙인다. 이미지는 PDF 로 변환한 뒤 OCR 한다. 기본 한국어·영어, 다른 언어는 옵션(모델 다운로드). 모델은 `ocr/models/` (`npm run prepare:ocr`).
 - 파일명 일괄 변경: 이름 변환은 화면(`src/features/rename/ops.js`)에서 미리보기로 만들고, 실제 변경은 `rename.apply`(`electron/modules/rename.js`)가 전부 검증한 뒤 임시 이름을 거쳐 적용한다. 마지막 적용은 "실행 취소"로 되돌릴 수 있다.
-- `electron/capture/*` — 매크로 화면 캡처: 화면·창·영역 캡처(`screenCapture.js`), 영역 선택 오버레이(`regionPicker.*`), 매크로 실행기(`macroRunner.js`, 키보드·마우스는 nut.js), 프리셋 저장(`presets.js` → `macros.json`)
+- `electron/capture/*` — 매크로 & 화면 캡처: 화면·창·영역 캡처(`screenCapture.js`), 영역 선택 오버레이(`regionPicker.*`), 매크로 실행기(`macroRunner.js`, 키보드·마우스는 nut.js), 프리셋 저장(`presets.js` → `macros.json`)
 - `electron/settingsService.js` — 설정 저장
 - `shared/*` — 메인/화면 공용 코드 (`constants.js` 에 앱 이름·버전)
 - `src/` — React 화면. `src/lib/apiClient.js` 가 API 클라이언트 (`window.frame.api` → IPC `api:call` → `dispatchApi`)
@@ -53,7 +53,7 @@
 - 개발: `<프로젝트>/data` (설정 `settings.json`)
 - portable: exe 옆 `data` (zip 안에 `.portable` 표시 파일 포함)
 - 설치형: 사용자 데이터 폴더 아래 `data`
-- 매크로 화면 캡처의 프리셋은 같은 `data` 폴더의 `macros.json` 에 저장된다. 캡처 이미지의 기본 저장 위치는 `사진/All In One Tools`.
+- 매크로 & 화면 캡처의 프리셋은 같은 `data` 폴더의 `macros.json` 에 저장된다. 캡처 이미지의 기본 저장 위치는 `사진/All In One Tools`.
 - `APP_DATA_DIR` 환경변수로 재지정 가능
 
 ## 앱 이름·버전 바꾸기

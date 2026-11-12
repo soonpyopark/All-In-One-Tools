@@ -5,15 +5,28 @@ import { JobActivityProvider, useJobActivity } from '../../context/JobActivityCo
 import { FEATURES } from '../../features/registry.js';
 import { api, getNative } from '../../lib/apiClient.js';
 import { orderFeatures } from '../../lib/featureOrder.js';
-import { openExternalUrl } from '../../lib/openExternal.js';
 import { runStartupUpdateCheck } from '../../lib/updateCheckUi.js';
 import SettingsView from '../settings/SettingsView.jsx';
 import TopBar from './TopBar.jsx';
 
-const BLOG_URL = 'https://note4all.tistory.com';
 const SIDEBAR_COLLAPSED_KEY = 'frame.sidebarCollapsed';
+const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
 let startupChecked = false;
+
+function padTime(n) {
+  return String(n).padStart(2, '0');
+}
+
+/** @param {Date} date */
+function formatSidebarClock(date) {
+  return `${padTime(date.getHours())}:${padTime(date.getMinutes())}:${padTime(date.getSeconds())}`;
+}
+
+/** @param {Date} date */
+function formatSidebarDay(date) {
+  return `${date.getMonth() + 1}월 ${date.getDate()}일 (${WEEKDAYS[date.getDay()]})`;
+}
 
 /** @returns {boolean} */
 function readSidebarCollapsed() {
@@ -61,6 +74,7 @@ function AppShellInner() {
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readSidebarCollapsed());
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
+  const [now, setNow] = useState(() => new Date());
   const mainRef = useRef(/** @type {HTMLElement | null} */ (null));
   /** 메뉴 id → 초기화 횟수. 해당 메뉴만 다시 마운트합니다. */
   const [resetKeys, setResetKeys] = useState(/** @type {Record<string, number>} */ ({}));
@@ -180,6 +194,11 @@ function AppShellInner() {
   }, []);
 
   useEffect(() => {
+    const id = window.setInterval(() => setNow(new Date()), 250);
+    return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
     const native = getNative();
     if (!native?.getAlwaysOnTop) return;
     let alive = true;
@@ -207,7 +226,11 @@ function AppShellInner() {
 
   return (
     <div className="flex h-full min-h-0 flex-col">
-      <TopBar settingsOpen={settingsOpen} onToggleSettings={() => setSettingsOpen((open) => !open)} />
+      <TopBar
+        settingsOpen={settingsOpen}
+        onToggleSettings={() => setSettingsOpen((open) => !open)}
+        onGoHome={() => goTo(features[0]?.id || 'home')}
+      />
 
       <div className="flex min-h-0 flex-1">
         {features.length > 1 ? (
@@ -269,19 +292,30 @@ function AppShellInner() {
                   );
                 })}
               </div>
-              {!sidebarCollapsed ? (
-                <a
-                  href={BLOG_URL}
-                  className="mt-2 shrink-0 truncate rounded-md px-3 py-2 text-left text-xs text-slate-400 transition-colors hover:bg-app-sidebarHover/60 hover:text-slate-200"
-                  title={BLOG_URL}
-                  onClick={(event) => {
-                    event.preventDefault();
-                    void openExternalUrl(BLOG_URL);
-                  }}
+              <div className="mt-2 flex shrink-0 flex-col gap-0.5">
+                <button
+                  type="button"
+                  className={`flex w-full items-center justify-center rounded-md py-2 transition-colors hover:bg-app-sidebarHover/60 ${
+                    sidebarCollapsed ? 'px-0' : 'px-3'
+                  }`}
+                  title="시간 & 알람으로 이동"
+                  aria-label={`현재 시각 ${formatSidebarClock(now)}, ${formatSidebarDay(now)}. 시간 및 알람으로 이동`}
+                  onClick={() => goTo('clock')}
                 >
-                  note4all.tistory.com
-                </a>
-              ) : null}
+                  {sidebarCollapsed ? (
+                    <span className="font-mono text-[10px] font-semibold tabular-nums text-slate-300">
+                      {padTime(now.getHours())}:{padTime(now.getMinutes())}
+                    </span>
+                  ) : (
+                    <span className="flex min-w-0 items-baseline justify-center gap-2 whitespace-nowrap">
+                      <span className="font-mono text-lg font-semibold tabular-nums tracking-tight text-slate-100">
+                        {formatSidebarClock(now)}
+                      </span>
+                      <span className="text-sm text-slate-400">{formatSidebarDay(now)}</span>
+                    </span>
+                  )}
+                </button>
+              </div>
             </nav>
 
             {/* 사이드바 오른쪽 가장자리 띠지 */}

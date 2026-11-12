@@ -5,6 +5,8 @@ import { useDialog } from '../../context/DialogContext.jsx';
 import { useReportJobRunning } from '../../context/JobActivityContext.jsx';
 import { useJobProgressScroll } from '../../hooks/useJobProgressScroll.js';
 import { useLoad } from '../../hooks/useLoad.js';
+import { openExternalUrl } from '../../lib/openExternal.js';
+import { TINY_PDF_EDITOR_URL } from '../../../shared/constants.js';
 import RegionPreview from './RegionPreview.jsx';
 import {
   Badge,
@@ -41,7 +43,7 @@ function batchTone(state) {
 /**
  * 정리 화면. `tool` 로 어떤 작업을 보여 줄지 정합니다.
  *  - `ebook-extract` : 이미지 자르기 & PDF 저장 (스크린샷에서 이북 영역 등을 추출)
- *  - `pdf-dedup`     : PDF 중복페이지 정리
+ *  - `pdf-dedup`     : PDF 중복페이지 자동 정리
  *
  * @param {{ tool?: 'ebook-extract' | 'pdf-dedup', featureId?: string }} props
  */
@@ -50,7 +52,7 @@ export default function CleanupPage({ tool = 'ebook-extract', featureId } = {}) 
   const native = getNative();
   const { data, loading, error, reload } = useLoad(() => api('cleanup.tools'));
 
-  const pageTitle = tool === 'pdf-dedup' ? 'PDF 중복페이지 정리' : '이미지 자르기 & PDF 저장';
+  const pageTitle = tool === 'pdf-dedup' ? 'PDF 중복페이지 자동 정리' : '이미지 자르기 & PDF 저장';
   // 저장 폴더는 화면(작업)마다 따로 기억합니다.
   const outputKey = tool === 'pdf-dedup' ? 'pdfDedupOutput' : 'cleanupOutput';
   const tools = data?.tools ?? [];
@@ -390,6 +392,19 @@ export default function CleanupPage({ tool = 'ebook-extract', featureId } = {}) 
               ? 'PDF 에서 비슷한 페이지를 찾아 제거합니다. 여러 PDF 를 한 번에 처리할 수 있습니다.'
               : '스크린샷 같은 이미지에서 특정 영역(예: 이북 화면)을 자동으로 잘라 내고, 연속된 유사 이미지는 제외합니다. 원하면 PDF 로 합칠 수 있습니다.'}
           </p>
+          {isPdf ? (
+            <p className="mt-1.5 text-sm text-slate-500">
+              페이지 순서·합치기·서명 등 편집은{' '}
+              <button
+                type="button"
+                className="font-medium text-app-accent hover:underline"
+                onClick={() => void openExternalUrl(TINY_PDF_EDITOR_URL)}
+              >
+                Tiny PDF Editor
+              </button>
+              를 사용하세요.
+            </p>
+          ) : null}
         </section>
 
         <Section title="작업 설정">
@@ -522,7 +537,7 @@ export default function CleanupPage({ tool = 'ebook-extract', featureId } = {}) 
             {isEbook ? (
               <Field
                 group
-                label="이북 영역"
+                label="자르기 영역"
                 hint="여러 장에서 감지한 영역의 합의 결과를 모든 이미지에 같은 비율로 적용합니다. 자동 감지가 어긋나면 수동으로 지정하세요."
               >
                 <div className="space-y-3">

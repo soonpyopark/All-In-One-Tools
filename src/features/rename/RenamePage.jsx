@@ -116,25 +116,24 @@ function Radios({ name, value, options, onChange }) {
   );
 }
 
-/** 파일 종류별 아이콘 (목록 왼쪽에 작게 표시). */
-function iconFor(ext) {
-  const e = ext.toLowerCase();
-  if (['.png', '.jpg', '.jpeg', '.gif', '.bmp', '.webp', '.svg', '.ico'].includes(e)) return '🖼️';
-  if (['.mp4', '.mkv', '.avi', '.mov', '.wmv', '.webm'].includes(e)) return '🎞️';
-  if (['.mp3', '.wav', '.flac', '.m4a', '.aac', '.ogg'].includes(e)) return '🎵';
-  if (['.txt', '.md', '.doc', '.docx', '.hwp', '.hwpx', '.pdf', '.xls', '.xlsx', '.ppt', '.pptx'].includes(e)) return '📝';
-  if (['.zip', '.7z', '.rar', '.tar', '.gz'].includes(e)) return '📦';
-  return '📄';
+/** 확장자 뱃지 (목록 왼쪽). */
+function ExtBadge({ ext }) {
+  const label = String(ext || '').replace(/^\./, '').toUpperCase() || 'FILE';
+  return (
+    <span className="inline-flex min-w-[2.4rem] shrink-0 items-center justify-center rounded bg-slate-100 px-1.5 py-0.5 text-[10px] font-semibold tracking-wide text-slate-500">
+      {label.slice(0, 5)}
+    </span>
+  );
 }
 
-const BULLET_COLOR = {
-  red: 'text-red-500',
-  blue: 'text-blue-600',
-  green: 'text-emerald-600',
-  olive: 'text-yellow-700',
+const ACCENT_DOT = {
+  red: 'bg-rose-400',
+  blue: 'bg-sky-400',
+  green: 'bg-emerald-400',
+  olive: 'bg-amber-400',
 };
 
-/** 좌우 기능 버튼 한 개 (색 삼각형 + 글자, 평평한 모양). */
+/** 좌우 기능 버튼 한 개. */
 function SideButton({ label, color, disabled, title, onClick }) {
   return (
     <button
@@ -142,10 +141,10 @@ function SideButton({ label, color, disabled, title, onClick }) {
       disabled={disabled}
       title={title}
       onClick={onClick}
-      className="flex max-h-14 min-h-9 w-full flex-1 items-center gap-1.5 px-3 text-left text-[13px] text-slate-800 transition-colors hover:bg-white active:bg-slate-200 disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent"
+      className="flex max-h-14 min-h-9 w-full flex-1 items-center gap-2 px-3 text-left text-[13px] text-slate-700 transition-colors hover:bg-white hover:text-slate-900 active:bg-slate-100 disabled:cursor-default disabled:opacity-40 disabled:hover:bg-transparent"
     >
-      <span aria-hidden="true" className={`text-[9px] ${BULLET_COLOR[color]}`}>▶</span>
-      {label}
+      <span aria-hidden="true" className={`h-1.5 w-1.5 shrink-0 rounded-full ${ACCENT_DOT[color] || 'bg-slate-300'}`} />
+      <span className="truncate">{label}</span>
     </button>
   );
 }
@@ -176,29 +175,31 @@ function MenuBar({ menus }) {
   }, [openId]);
 
   return (
-    <div ref={ref} className="flex items-center border-b border-slate-200 bg-white px-1 text-[13px] text-slate-800">
+    <div ref={ref} className="flex items-center border-b border-slate-200 bg-slate-50/80 px-1 text-[13px] text-slate-700">
       {menus.map((menu) => (
         <div key={menu.id} className="relative">
           <button
             type="button"
             aria-expanded={openId === menu.id}
-            className={`px-3 py-1.5 ${openId === menu.id ? 'bg-slate-200' : 'hover:bg-slate-100'}`}
+            className={`rounded-md px-3 py-1.5 ${
+              openId === menu.id ? 'bg-white text-slate-900 shadow-sm' : 'hover:bg-white/80 hover:text-slate-900'
+            }`}
             onClick={() => setOpenId(openId === menu.id ? null : menu.id)}
             onMouseEnter={() => openId !== null && setOpenId(menu.id)}
           >
             {menu.label}
           </button>
           {openId === menu.id ? (
-            <div className="absolute left-0 top-full z-30 min-w-[14rem] border border-slate-300 bg-white py-1 shadow-lg">
+            <div className="absolute left-0 top-full z-30 min-w-[14rem] rounded-md border border-slate-200 bg-white py-1 shadow-lg">
               {menu.items.map((item, index) =>
                 item.separator ? (
-                  <div key={`sep-${index}`} className="my-1 border-t border-slate-200" />
+                  <div key={`sep-${index}`} className="my-1 border-t border-slate-100" />
                 ) : (
                   <button
                     key={item.label}
                     type="button"
                     disabled={item.disabled}
-                    className="flex w-full items-center justify-between gap-6 px-4 py-1.5 text-left hover:bg-blue-600 hover:text-white disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-inherit"
+                    className="flex w-full items-center justify-between gap-6 px-4 py-1.5 text-left hover:bg-app-accentSoft hover:text-app-accentText disabled:opacity-40 disabled:hover:bg-transparent disabled:hover:text-inherit"
                     onClick={() => {
                       setOpenId(null);
                       item.onClick();
@@ -208,7 +209,7 @@ function MenuBar({ menus }) {
                       {item.checked === undefined ? '' : item.checked ? '✓ ' : '\u2003'}
                       {item.label}
                     </span>
-                    {item.hint ? <span className="text-xs opacity-60">{item.hint}</span> : null}
+                    {item.hint ? <span className="text-xs text-slate-400">{item.hint}</span> : null}
                   </button>
                 ),
               )}
@@ -1061,14 +1062,19 @@ export default function RenamePage() {
       onDragOver={(event) => event.preventDefault()}
       onDrop={(event) => event.preventDefault()}
     >
-      <h1 className="m-0 text-lg font-semibold text-slate-900">{TITLE}</h1>
+      <div>
+        <h1 className="m-0 text-xl font-semibold text-slate-900">{TITLE}</h1>
+        <p className="mt-1 text-sm text-slate-500">
+          도구로 “바뀔이름”을 미리보기한 뒤, 적용을 눌러 실제 파일을 바꿉니다.
+        </p>
+      </div>
 
-      <div className="flex min-h-[28rem] flex-1 flex-col overflow-hidden rounded-lg border border-slate-300 bg-white shadow-sm">
+      <div className="flex min-h-[28rem] flex-1 flex-col overflow-hidden rounded-lg border border-slate-200 bg-white shadow-sm">
         <MenuBar menus={menus} />
 
         <div className="flex min-h-0 flex-1">
           {/* 왼쪽 버튼 열 */}
-          <aside className="flex w-40 shrink-0 flex-col border-r border-slate-300 bg-slate-100 py-1">
+          <aside className="flex w-40 shrink-0 flex-col border-r border-slate-200 bg-slate-50 py-1">
             {leftButtons.map((button) => (
               <SideButton
                 key={button.label}
@@ -1093,18 +1099,17 @@ export default function RenamePage() {
               onDropFiles(event);
             }}
             className={`relative min-w-0 flex-1 overflow-auto outline-none ${
-              dragOver ? 'bg-blue-50' : hasItems ? 'bg-white' : 'bg-slate-50'
+              dragOver ? 'bg-app-accentSoft/40' : hasItems ? 'bg-white' : 'bg-slate-50/50'
             }`}
           >
             {!hasItems ? (
               <div
                 className={`m-3 flex min-h-[16rem] flex-col items-center justify-center gap-3 rounded-lg border-2 border-dashed px-6 text-center ${
                   dragOver
-                    ? 'border-blue-500 bg-blue-50 text-blue-700'
-                    : 'border-slate-300 bg-white text-slate-500'
+                    ? 'border-app-accent bg-app-accentSoft text-app-accentText'
+                    : 'border-slate-200 bg-white text-slate-500'
                 }`}
               >
-                <span className="text-4xl" aria-hidden="true">📂</span>
                 <p className="m-0 text-sm">
                   {dragOver
                     ? '놓으면 목록에 추가됩니다'
@@ -1116,17 +1121,17 @@ export default function RenamePage() {
                 </div>
               </div>
             ) : (
-              <table className="w-full table-fixed border-collapse text-[13px]">
+              <table className="w-full table-fixed border-collapse text-sm">
                 <colgroup>
                   <col style={{ width: '36%' }} />
                   <col style={{ width: '36%' }} />
                   <col />
                 </colgroup>
-                <thead className="sticky top-0 z-10 bg-slate-100 text-left text-slate-800">
-                  <tr className="border-b border-slate-300">
-                    <th className="border-r border-slate-300 px-2 py-1 font-normal">현재이름</th>
-                    <th className="border-r border-slate-300 px-2 py-1 font-normal">바뀔이름</th>
-                    <th className="px-2 py-1 font-normal">파일위치</th>
+                <thead className="sticky top-0 z-10 bg-slate-50 text-left text-slate-600">
+                  <tr className="border-b border-slate-200">
+                    <th className="px-3 py-2 text-xs font-semibold">현재이름</th>
+                    <th className="px-3 py-2 text-xs font-semibold">바뀔이름</th>
+                    <th className="px-3 py-2 text-xs font-semibold">파일위치</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -1139,17 +1144,21 @@ export default function RenamePage() {
                       <tr
                         key={item.id}
                         onClick={(event) => onRowClick(event, item)}
-                        className={`cursor-default ${
-                          isSel ? (problem ? 'bg-red-600 text-white' : 'bg-blue-600 text-white') : 'text-slate-800 hover:bg-blue-50'
+                        className={`cursor-default border-b border-slate-100 ${
+                          isSel
+                            ? 'bg-app-accentSoft ring-1 ring-inset ring-app-accentBorder'
+                            : 'text-slate-800 hover:bg-slate-50'
                         }`}
                       >
-                        <td className="truncate px-2 py-[3px]" title={item.origName}>
-                          <span className="mr-1.5" aria-hidden="true">{iconFor(item.ext)}</span>
-                          {item.origName}
+                        <td className="truncate px-3 py-1.5" title={item.origName}>
+                          <span className="inline-flex max-w-full items-center gap-2">
+                            <ExtBadge ext={item.ext} />
+                            <span className="truncate">{item.origName}</span>
+                          </span>
                         </td>
                         <td
-                          className={`px-2 py-[3px] ${
-                            isSel ? '' : problem ? 'text-red-600' : changed ? 'font-medium text-blue-700' : ''
+                          className={`px-3 py-1.5 ${
+                            problem ? 'text-red-600' : changed ? 'font-medium text-app-accent' : ''
                           }`}
                           title={problem || fullName(item)}
                           onDoubleClick={() => startEdit(item)}
@@ -1157,7 +1166,7 @@ export default function RenamePage() {
                           {editing?.id === item.id ? (
                             <input
                               autoFocus
-                              className="w-full rounded border border-blue-500 bg-white px-1.5 py-0 text-[13px] font-normal text-slate-900 outline-none"
+                              className="w-full rounded border border-app-accent bg-white px-1.5 py-0 text-sm font-normal text-slate-900 outline-none"
                               value={editing.text}
                               onChange={(e) => setEditing({ id: item.id, text: e.target.value })}
                               onFocus={(e) => {
@@ -1176,13 +1185,15 @@ export default function RenamePage() {
                               onDoubleClick={(e) => e.stopPropagation()}
                             />
                           ) : (
-                            <span className="block truncate">
-                              {problem ? '⚠ ' : ''}
+                            <span className={`block truncate ${problem ? 'font-medium' : ''}`}>
                               {fullName(item) || '(빈 이름)'}
                             </span>
                           )}
                         </td>
-                        <td className={`truncate px-2 py-[3px] ${isSel ? '' : 'text-slate-500'}`} title={moved ? `${item.dir} → ${item.targetDir}` : item.dir}>
+                        <td
+                          className={`truncate px-3 py-1.5 text-slate-500 ${moved ? 'text-amber-700' : ''}`}
+                          title={moved ? `${item.dir} → ${item.targetDir}` : item.dir}
+                        >
                           {moved ? `→ ${item.targetDir}` : item.dir}
                         </td>
                       </tr>
@@ -1191,15 +1202,15 @@ export default function RenamePage() {
                 </tbody>
               </table>
             )}
-            {dragOver ? (
-              <div className="pointer-events-none absolute inset-2 flex items-center justify-center rounded-lg border-2 border-dashed border-blue-500 bg-blue-50/80 text-sm font-medium text-blue-700">
+            {dragOver && hasItems ? (
+              <div className="pointer-events-none absolute inset-2 flex items-center justify-center rounded-lg border-2 border-dashed border-app-accent bg-app-accentSoft/80 text-sm font-medium text-app-accentText">
                 놓으면 목록에 추가됩니다
               </div>
             ) : null}
           </div>
 
           {/* 오른쪽 버튼 열 */}
-          <aside className="flex w-40 shrink-0 flex-col border-l border-slate-300 bg-slate-100 py-1">
+          <aside className="flex w-40 shrink-0 flex-col border-l border-slate-200 bg-slate-50 py-1">
             {rightButtons.map((button) => (
               <SideButton
                 key={button.label}
@@ -1210,18 +1221,28 @@ export default function RenamePage() {
           </aside>
         </div>
 
-        {/* 상태 표시줄 */}
-        <div className="border-t border-slate-300 bg-slate-100 px-3 py-1.5 text-center text-sm text-slate-700">
+        {/* 하단 요약 */}
+        <div className="flex flex-wrap items-center justify-center gap-x-3 gap-y-1 border-t border-slate-200 bg-slate-50 px-3 py-2 text-sm text-slate-600">
           {firstProblem ? (
-            <span className="text-red-600">⚠ {firstProblem.origName}: {problems.get(firstProblem.id)}</span>
+            <span className="text-red-600">
+              {firstProblem.origName}: {problems.get(firstProblem.id)}
+            </span>
           ) : (
             <>
-              {items.length} 개
+              <span>{items.length}개</span>
               {hasItems ? (
-                <span className="ml-3 text-xs text-slate-500">
-                  선택 {selected.size} · 변경 예정 {changedItems.length}
-                  {moveCount > 0 ? ` (이동 ${moveCount})` : ''}
-                </span>
+                <>
+                  <span className="text-slate-300">·</span>
+                  <span>선택 {selected.size}</span>
+                  <span className="text-slate-300">·</span>
+                  <span>변경 예정 {changedItems.length}</span>
+                  {moveCount > 0 ? (
+                    <>
+                      <span className="text-slate-300">·</span>
+                      <span>이동 {moveCount}</span>
+                    </>
+                  ) : null}
+                </>
               ) : null}
             </>
           )}

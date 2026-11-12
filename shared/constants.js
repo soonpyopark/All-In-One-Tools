@@ -30,6 +30,16 @@ export const APP_BUILD_STAMP = '261112_110421';
  */
 export const UPDATE_REPO = 'soonpyopark/All-In-One-Tools';
 
+/**
+ * 페이지 순서·합치기·서명 등 PDF 편집은 Tiny PDF Editor 로 안내합니다.
+ * @see https://github.com/soonpyopark/Tiny-PDF-Editor
+ */
+export const TINY_PDF_EDITOR_URL = 'https://github.com/soonpyopark/Tiny-PDF-Editor';
+export const TINY_PDF_EDITOR_RELEASES_URL = `${TINY_PDF_EDITOR_URL}/releases`;
+
+/** 출장 경로 찾기 (Path Finder) — 런처 기본 바로가기용. */
+export const PATH_FINDER_URL = 'https://pathfinder-eight-pearl.vercel.app/';
+
 /** Content hash of build/icon-source.png (scripts/prepare-icons.mjs). */
 export { APP_ICON_REV } from './iconRev.js';
 

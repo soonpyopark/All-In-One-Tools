@@ -232,7 +232,7 @@ function runTone(state) {
 
 const RUN_LABELS = { running: '실행 중', done: '완료', stopped: '중지됨', error: '오류' };
 
-/** 매크로 화면 캡처: 화면/창/영역 캡처 + 키보드·마우스 매크로 프리셋. */
+/** 매크로 & 화면 캡처: 화면/창/영역 캡처 + 키보드·마우스 매크로 프리셋. */
 export default function CapturePage({ featureId } = {}) {
   const dialog = useDialog();
   const native = getNative();
@@ -270,7 +270,7 @@ export default function CapturePage({ featureId } = {}) {
   const isArmed = Boolean(draft && status.armed?.presetId === draft.id);
 
   const showError = useCallback(
-    (message) => void dialog.alert({ title: '매크로 화면 캡처', body: message }),
+    (message) => void dialog.alert({ title: '매크로 & 화면 캡처', body: message }),
     [dialog],
   );
   const toMessage = (err, fallback) => (err instanceof Error ? err.message : fallback);
@@ -847,7 +847,7 @@ export default function CapturePage({ featureId } = {}) {
     <div className="h-full overflow-auto px-6 py-6">
       <div className="space-y-5">
         <section>
-          <h1 className="m-0 text-xl font-semibold text-slate-900">매크로 화면 캡처</h1>
+          <h1 className="m-0 text-xl font-semibold text-slate-900">매크로 & 화면 캡처</h1>
           <p className="mt-1 text-sm text-slate-500">
             화면·창·영역을 캡처하거나, 키보드·마우스 매크로로 페이지를 넘기며 자동으로 캡처합니다. 캡처한 폴더는 이미지 자르기 & PDF 저장에서 바로 쓸 수 있습니다.
           </p>

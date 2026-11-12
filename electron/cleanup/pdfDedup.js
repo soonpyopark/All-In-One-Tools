@@ -12,7 +12,8 @@ const workerPath = path.join(pdfjsRoot, 'legacy/build/pdf.worker.mjs');
 const standardFontDataUrl = pathToFileURL(path.join(pdfjsRoot, 'standard_fonts') + path.sep).href;
 GlobalWorkerOptions.workerSrc = pathToFileURL(workerPath).href;
 
-export const DEFAULT_SIMILARITY_PERCENT = 99.9999;
+export { DEFAULT_SIMILARITY_PERCENT } from '../../shared/pdfDedupDefaults.js';
+import { DEFAULT_SIMILARITY_PERCENT } from '../../shared/pdfDedupDefaults.js';
 
 /**
  * @param {unknown} percent
@@ -174,16 +175,17 @@ function uniqueOutputPath(sourcePath, outputDir) {
 }
 
 /**
+ * 중복으로 판단된 페이지 인덱스(0-based)만 반환. 파일은 쓰지 않습니다.
+ *
  * @param {{
  *   inputPath: string,
- *   outputDir?: string,
  *   mode?: 'consecutive' | 'global',
  *   similarityPercent?: number,
  *   signal?: AbortSignal,
  *   onProgress?: (ratio: number) => void,
  * }} args
  */
-export async function processPdfDedup(args) {
+export async function findDuplicatePageIndices(args) {
   const inputPath = path.resolve(String(args.inputPath ?? '').trim());
   if (!inputPath || !fs.existsSync(inputPath)) {
     throw new Error(`PDF 파일을 찾을 수 없습니다.\n${inputPath}`);
@@ -194,10 +196,6 @@ export async function processPdfDedup(args) {
 
   const mode = args.mode === 'global' ? 'global' : 'consecutive';
   const threshold = percentToThreshold(args.similarityPercent ?? DEFAULT_SIMILARITY_PERCENT);
-  const outputDir = path.resolve(
-    String(args.outputDir ?? '').trim() || path.dirname(inputPath),
-  );
-  fs.mkdirSync(outputDir, { recursive: true });
 
   args.onProgress?.(0.02);
   const fileBytes = fs.readFileSync(inputPath);
@@ -211,46 +209,13 @@ export async function processPdfDedup(args) {
   try {
     if (args.signal?.aborted) throw new Error('작업이 취소되었습니다.');
     const pagesBefore = pdf.numPages;
-    const remove = await pagesToRemove(pdf, mode, threshold, 400, args.onProgress);
-    args.onProgress?.(0.8);
-
-    if (remove.length === 0) {
-      args.onProgress?.(1);
-      return {
-        inputPath,
-        outputPath: null,
-        pagesBefore,
-        pagesAfter: pagesBefore,
-        removedCount: 0,
-        removedIndices: [],
-        unchanged: true,
-      };
-    }
-
-    const keep = [];
-    const removeSet = new Set(remove);
-    for (let i = 0; i < pagesBefore; i += 1) {
-      if (!removeSet.has(i)) keep.push(i);
-    }
-
-    // Re-read: pdf.js may detach/transfer the previous Uint8Array.
-    const srcDoc = await PDFDocument.load(fs.readFileSync(inputPath), { ignoreEncryption: true });
-    const outDoc = await PDFDocument.create();
-    const copied = await outDoc.copyPages(srcDoc, keep);
-    for (const page of copied) outDoc.addPage(page);
-    const bytes = await outDoc.save();
-    const outputPath = uniqueOutputPath(inputPath, outputDir);
-    fs.writeFileSync(outputPath, bytes);
+    const removedIndices = await pagesToRemove(pdf, mode, threshold, 400, args.onProgress);
     args.onProgress?.(1);
-
     return {
       inputPath,
-      outputPath,
       pagesBefore,
-      pagesAfter: keep.length,
-      removedCount: remove.length,
-      removedIndices: remove,
-      unchanged: false,
+      removedIndices,
+      removedCount: removedIndices.length,
     };
   } finally {
     try {
@@ -259,4 +224,60 @@ export async function processPdfDedup(args) {
       // ignore cleanup errors
     }
   }
+}
+
+/**
+ * @param {{
+ *   inputPath: string,
+ *   outputDir?: string,
+ *   mode?: 'consecutive' | 'global',
+ *   similarityPercent?: number,
+ *   signal?: AbortSignal,
+ *   onProgress?: (ratio: number) => void,
+ * }} args
+ */
+export async function processPdfDedup(args) {
+  const inputPath = path.resolve(String(args.inputPath ?? '').trim());
+  const outputDir = path.resolve(
+    String(args.outputDir ?? '').trim() || path.dirname(inputPath),
+  );
+  fs.mkdirSync(outputDir, { recursive: true });
+
+  const found = await findDuplicatePageIndices(args);
+  if (found.removedCount === 0) {
+    return {
+      inputPath,
+      outputPath: null,
+      pagesBefore: found.pagesBefore,
+      pagesAfter: found.pagesBefore,
+      removedCount: 0,
+      removedIndices: [],
+      unchanged: true,
+    };
+  }
+
+  const removeSet = new Set(found.removedIndices);
+  /** @type {number[]} */
+  const keep = [];
+  for (let i = 0; i < found.pagesBefore; i += 1) {
+    if (!removeSet.has(i)) keep.push(i);
+  }
+
+  const srcDoc = await PDFDocument.load(fs.readFileSync(inputPath), { ignoreEncryption: true });
+  const outDoc = await PDFDocument.create();
+  const copied = await outDoc.copyPages(srcDoc, keep);
+  for (const page of copied) outDoc.addPage(page);
+  const bytes = await outDoc.save();
+  const outputPath = uniqueOutputPath(inputPath, outputDir);
+  fs.writeFileSync(outputPath, bytes);
+
+  return {
+    inputPath,
+    outputPath,
+    pagesBefore: found.pagesBefore,
+    pagesAfter: keep.length,
+    removedCount: found.removedCount,
+    removedIndices: found.removedIndices,
+    unchanged: false,
+  };
 }

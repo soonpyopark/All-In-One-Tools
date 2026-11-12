@@ -16,7 +16,7 @@ export function register() {
       },
       {
         id: 'pdf-dedup',
-        label: 'PDF 중복 페이지 제거',
+        label: 'PDF 중복페이지 자동 정리',
         description: 'PDF에서 비슷한 페이지를 찾아 제거합니다. (연속 / 문서 전체)',
         inputExts: ['.pdf'],
         minInputs: 1,

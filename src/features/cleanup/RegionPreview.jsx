@@ -242,16 +242,16 @@ export default function RegionPreview({ src, box, editable, allowDraw = false, o
   return (
     <div
       ref={frameRef}
-      className={`relative mx-auto max-w-full select-none overflow-hidden rounded-md border border-slate-300 bg-slate-100 ${
+      className={`relative w-full select-none overflow-hidden rounded-md border border-slate-300 bg-slate-100 ${
         editable ? 'touch-none' : ''
       }`}
-      style={{ width: 'fit-content', cursor: editable ? cursor : 'default' }}
+      style={{ cursor: editable ? cursor : 'default' }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
       onPointerUp={onPointerUp}
       onPointerCancel={onPointerUp}
     >
-      <img src={src} alt="첫 번째 이미지 미리보기" draggable={false} className="block max-h-[28rem] max-w-full" />
+      <img src={src} alt="첫 번째 이미지 미리보기" draggable={false} className="block h-auto w-full" />
       {box ? (
         <div
           className="pointer-events-none absolute border-2 border-app-accent"

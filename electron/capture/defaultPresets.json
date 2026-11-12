@@ -5,8 +5,8 @@
       "name": "기본 매크로",
       "startKey": "F6",
       "stopKey": "F7",
-      "repeat": 1000,
-      "outputDir": "",
+      "repeat": 325,
+      "outputDir": "L:\\Screen",
       "format": "png",
       "jpegQuality": 90,
       "detectSame": true,
@@ -20,7 +20,7 @@
           "type": "capture",
           "target": {
             "mode": "screen",
-            "displayId": null,
+            "displayId": 2981354511,
             "windowTitle": "",
             "region": null
           }

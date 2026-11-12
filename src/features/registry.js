@@ -18,10 +18,13 @@ import AdjustPage from './adjust/AdjustPage.jsx';
 import CapturePage from './capture/CapturePage.jsx';
 import CleanupPage from './cleanup/CleanupPage.jsx';
 import PdfDedupPage from './cleanup/PdfDedupPage.jsx';
+import ClockPage from './clock/ClockPage.jsx';
 import ConvertPage from './convert/ConvertPage.jsx';
 import MergeGifsPage from './convert/MergeGifsPage.jsx';
 import HomePage from './home/HomePage.jsx';
+import LauncherPage from './launcher/LauncherPage.jsx';
 import OcrPage from './ocr/OcrPage.jsx';
+import PdfCompressPage from './pdfCompress/PdfCompressPage.jsx';
 import QrPage from './qr/QrPage.jsx';
 import RenamePage from './rename/RenamePage.jsx';
 import SubnetPage from './subnet/SubnetPage.jsx';
@@ -30,8 +33,16 @@ import SubnetPage from './subnet/SubnetPage.jsx';
 export const FEATURES = [
   { id: 'home', label: '홈', icon: '🏠', component: HomePage },
   {
+    id: 'launcher',
+    label: '런처',
+    icon: '🚀',
+    description: '자주 쓰는 프로그램·웹사이트·폴더·파일을 바로 엽니다.',
+    color: ['#fb923c', '#ea580c'],
+    component: LauncherPage,
+  },
+  {
     id: 'capture',
-    label: '매크로 화면 캡처',
+    label: '매크로 & 화면 캡처',
     icon: '📸',
     description: '화면·창·영역을 캡처하고, 키보드·마우스 매크로 프리셋으로 페이지를 넘기며 자동 캡처합니다.',
     color: ['#ff7aa8', '#e0426f'],
@@ -54,8 +65,16 @@ export const FEATURES = [
     component: OcrPage,
   },
   {
+    id: 'pdf-compress',
+    label: 'PDF 용량 줄이기',
+    icon: '🗜️',
+    description: 'Tiny PDF Editor 와 같이 텍스트·검색은 유지하고 이미지 위주로 PDF 용량을 줄입니다.',
+    color: ['#fbbf24', '#d97706'],
+    component: PdfCompressPage,
+  },
+  {
     id: 'pdf-dedup',
-    label: 'PDF 중복페이지 정리',
+    label: 'PDF 중복페이지 자동 정리',
     icon: '🧹',
     description: 'PDF 에서 비슷한 페이지를 찾아 제거합니다. (연속 / 문서 전체)',
     color: ['#2dd4bf', '#0f9488'],
@@ -108,5 +127,13 @@ export const FEATURES = [
     description: 'IPv4 주소와 서브넷마스크로 네트워크·브로드캐스트 주소와 사용 가능한 호스트 범위를 계산합니다.',
     color: ['#ffb454', '#e8791a'],
     component: SubnetPage,
+  },
+  {
+    id: 'clock',
+    label: '시간 & 알람',
+    icon: '⏰',
+    description: '현재 시각, 타이머, 알람을 사용합니다. 다른 메뉴에 있어도 알림이 울립니다.',
+    color: ['#67e8f9', '#0891b2'],
+    component: ClockPage,
   },
 ];
