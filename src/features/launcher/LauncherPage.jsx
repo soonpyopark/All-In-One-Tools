@@ -1,4 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import {
+  DEFAULT_LAUNCHER_COLOR,
+  LAUNCHER_COLOR_PALETTE,
+  launcherColorGradient,
+  normalizeLauncherColorId,
+} from '../../../shared/launcherColors.js';
 import { Section, btnClass, btnPrimaryClass, inputClass } from '../../components/settings/ui.jsx';
 import { useDialog } from '../../context/DialogContext.jsx';
 import { api, getNative } from '../../lib/apiClient.js';
@@ -18,6 +24,7 @@ function isExternalFileDrag(event) {
  *   target: string,
  *   icon: string,
  *   group: 'work' | 'personal' | 'general',
+ *   color: string,
  * }} LauncherItem
  */
 
@@ -193,7 +200,7 @@ const ICON_PRESETS = [
 /** 중복 제거한 아이콘 목록 */
 const ICON_PRESET_UNIQUE = [...new Set(ICON_PRESETS)];
 
-/** @returns {Partial<LauncherItem> & { type: LauncherItem['type'], group: LauncherItem['group'] }} */
+/** @returns {Partial<LauncherItem> & { type: LauncherItem['type'], group: LauncherItem['group'], color: string }} */
 function blankDraft(type) {
   return {
     id: '',
@@ -202,13 +209,18 @@ function blankDraft(type) {
     target: '',
     icon: TYPE_ICON[type],
     group: 'general',
+    color: DEFAULT_LAUNCHER_COLOR,
   };
 }
 
 /**
  * 런처: 프로그램·웹사이트·폴더·파일 바로가기 (그룹·아이콘·검색).
+ * @param {{
+ *   editItemId?: string | null,
+ *   onEditItemHandled?: () => void,
+ * }} [props]
  */
-export default function LauncherPage() {
+export default function LauncherPage({ editItemId = null, onEditItemHandled } = {}) {
   const dialog = useDialog();
   const native = getNative();
   const [items, setItems] = useState(/** @type {LauncherItem[]} */ ([]));
@@ -249,6 +261,54 @@ export default function LauncherPage() {
       alive = false;
     };
   }, [dialog]);
+
+  // 플로팅 런처에서 추가·삭제해도 메인 목록을 바로 맞춥니다.
+  useEffect(() => {
+    if (!native?.onLauncherItemsChanged) return undefined;
+    return native.onLauncherItemsChanged((payload) => {
+      const next = Array.isArray(payload?.items) ? payload.items : null;
+      if (!next) return;
+      setItems(/** @type {LauncherItem[]} */ (next));
+      setDraft((current) => {
+        if (!current?.id) return current;
+        return next.some((entry) => entry?.id === current.id) ? current : null;
+      });
+    });
+  }, [native]);
+
+  // 플로팅 런처 ✎ → 메인 런처 편집 폼 열기
+  useEffect(() => {
+    const id = String(editItemId ?? '').trim();
+    if (!id) return undefined;
+    let alive = true;
+    void (async () => {
+      let list = items;
+      if (!list.some((item) => item.id === id)) {
+        try {
+          const res = await api('launcher.list');
+          list = Array.isArray(res?.items) ? res.items : [];
+          if (alive) setItems(list);
+        } catch {
+          // 목록을 못 읽어도 아래 안내로 처리
+        }
+      }
+      if (!alive) return;
+      const item = list.find((entry) => entry.id === id);
+      if (item) {
+        setDraft({ ...item });
+        setGroupFilter('all');
+        setQuery('');
+      } else {
+        void dialog.alert({ title: '런처', body: '편집할 바로가기를 찾지 못했습니다.' });
+      }
+      onEditItemHandled?.();
+    })();
+    return () => {
+      alive = false;
+    };
+    // items 는 의도적으로 deps 에서 제외 (요청 id 기준으로 한 번만 처리)
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [editItemId]);
 
   const filteredItems = useMemo(() => {
     const q = query.trim().toLowerCase();
@@ -339,6 +399,17 @@ export default function LauncherPage() {
       });
     } finally {
       setAddingDrops(false);
+    }
+  };
+
+  const openFloatingLauncher = async () => {
+    try {
+      await api('launcher.floating.show');
+    } catch (err) {
+      void dialog.alert({
+        title: '플로팅 런처',
+        body: err instanceof Error ? err.message : '플로팅 런처를 열지 못했습니다.',
+      });
     }
   };
 
@@ -460,6 +531,7 @@ export default function LauncherPage() {
         target,
         icon: String(draft.icon || TYPE_ICON[draft.type]).slice(0, 32),
         group: draft.group === 'work' || draft.group === 'personal' ? draft.group : 'general',
+        color: normalizeLauncherColorId(draft.color),
       };
       const res = await api('launcher.upsert', { item: payload });
       setItems(Array.isArray(res?.items) ? res.items : items);
@@ -588,6 +660,13 @@ export default function LauncherPage() {
             <button type="button" className={btnClass} onClick={() => void importBackup()}>
               가져오기
             </button>
+            <button
+              type="button"
+              className={btnPrimaryClass}
+              onClick={() => void openFloatingLauncher()}
+            >
+              플로팅 런처
+            </button>
           </div>
         </section>
 
@@ -624,9 +703,19 @@ export default function LauncherPage() {
         {draft ? (
           <Section
             title={draft.id ? '바로가기 편집' : `${TYPE_LABEL[draft.type]} 추가`}
-            description="아이콘·그룹·이름과 대상을 확인한 뒤 저장하세요."
+            description="아이콘·배경색·그룹·이름과 대상을 확인한 뒤 저장하세요."
           >
-            <div className="grid gap-3 sm:grid-cols-[5rem_1fr_8rem]">
+            <div className="grid gap-3 sm:grid-cols-[5rem_5rem_1fr_8rem]">
+              <div className="flex flex-col gap-1.5">
+                <span className="text-xs font-medium text-slate-600">미리보기</span>
+                <div
+                  className="flex h-[2.625rem] items-center justify-center rounded-xl text-xl shadow-sm"
+                  style={{ background: launcherColorGradient(draft.color) }}
+                  aria-hidden
+                >
+                  {draft.icon || TYPE_ICON[draft.type]}
+                </div>
+              </div>
               <label className="flex flex-col gap-1.5">
                 <span className="text-xs font-medium text-slate-600">아이콘</span>
                 <input
@@ -664,7 +753,31 @@ export default function LauncherPage() {
                 </select>
               </label>
             </div>
-            <div className="mt-2 max-h-48 overflow-y-auto rounded-md border border-slate-200 bg-slate-50/80 p-2">
+            <div className="mt-3">
+              <span className="text-xs font-medium text-slate-600">아이콘 배경</span>
+              <div className="mt-1.5 flex flex-wrap items-center gap-2">
+                {LAUNCHER_COLOR_PALETTE.map((swatch) => {
+                  const selected = normalizeLauncherColorId(draft.color) === swatch.id;
+                  return (
+                    <button
+                      key={swatch.id}
+                      type="button"
+                      title={swatch.label}
+                      aria-label={`배경색 ${swatch.label}`}
+                      aria-pressed={selected}
+                      className={`h-7 w-7 rounded-full border-2 transition-transform hover:scale-110 ${
+                        selected ? 'border-slate-800' : 'border-white shadow ring-1 ring-slate-200'
+                      }`}
+                      style={{ background: `linear-gradient(145deg, ${swatch.from}, ${swatch.to})` }}
+                      onClick={() =>
+                        setDraft((current) => (current ? { ...current, color: swatch.id } : current))
+                      }
+                    />
+                  );
+                })}
+              </div>
+            </div>
+            <div className="mt-2 max-h-[7.75rem] overflow-y-auto rounded-md border border-slate-200 bg-slate-50/80 p-2">
               <div className="grid grid-cols-[repeat(auto-fill,minmax(2rem,1fr))] gap-1.5">
                 {ICON_PRESET_UNIQUE.map((emoji) => (
                   <button
@@ -722,19 +835,22 @@ export default function LauncherPage() {
             </button>
           </Section>
         ) : (
-          <section aria-label="바로가기 목록" className="grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-3">
+          <section
+            aria-label="바로가기 목록"
+            className="grid grid-cols-[repeat(auto-fill,minmax(5.75rem,1fr))] gap-2"
+          >
             {filteredItems.map((item) => {
               const isDragging = draggingId === item.id;
               const isOver = overId === item.id && draggingId && draggingId !== item.id;
               return (
                 <div
                   key={item.id}
-                  className={`group relative flex min-w-0 flex-col overflow-hidden rounded-xl border-2 bg-white shadow-sm transition ${
+                  className={`group relative flex min-w-0 flex-col items-center rounded-xl border-2 bg-white p-2 pt-3 shadow-sm transition ${
                     isDragging
                       ? 'border-dashed border-slate-300 opacity-50'
                       : isOver
                         ? 'border-dashed border-app-accent ring-2 ring-app-accent/20'
-                        : 'border-solid border-app-border'
+                        : 'border-solid border-app-border hover:border-slate-300'
                   }`}
                   onDragOver={(event) => {
                     if (isExternalFileDrag(event)) {
@@ -768,11 +884,32 @@ export default function LauncherPage() {
                     setOverId(null);
                   }}
                 >
+                  <div className="absolute right-0.5 top-0.5 z-10 flex gap-0.5 opacity-0 transition group-hover:opacity-100 focus-within:opacity-100">
+                    <button
+                      type="button"
+                      className="flex h-5 w-5 items-center justify-center rounded bg-white/95 text-[11px] text-slate-500 shadow-sm ring-1 ring-slate-200 hover:bg-slate-50 hover:text-slate-800"
+                      title="편집"
+                      aria-label={`${item.title} 편집`}
+                      onClick={() => setDraft({ ...item })}
+                    >
+                      ✎
+                    </button>
+                    <button
+                      type="button"
+                      className="flex h-5 w-5 items-center justify-center rounded bg-white/95 text-[12px] font-semibold text-red-500 shadow-sm ring-1 ring-slate-200 hover:bg-red-50"
+                      title="삭제"
+                      aria-label={`${item.title} 삭제`}
+                      onClick={() => void removeItem(item)}
+                    >
+                      ×
+                    </button>
+                  </div>
                   <button
                     type="button"
                     draggable
-                    className="flex min-w-0 w-full flex-1 cursor-grab flex-col items-start gap-2 overflow-hidden p-4 text-left active:cursor-grabbing"
+                    className="flex w-full cursor-grab flex-col items-center gap-1.5 active:cursor-grabbing"
                     aria-label={`${item.title} 열기`}
+                    title={item.target}
                     disabled={busyId === item.id}
                     onDragStart={(event) => {
                       didDragRef.current = true;
@@ -795,40 +932,16 @@ export default function LauncherPage() {
                       void openItem(item);
                     }}
                   >
-                    <span className="flex h-11 w-11 shrink-0 items-center justify-center rounded-xl bg-slate-100 text-2xl">
+                    <span
+                      className="flex h-12 w-12 items-center justify-center rounded-2xl text-2xl shadow-sm"
+                      style={{ background: launcherColorGradient(item.color) }}
+                    >
                       {item.icon || TYPE_ICON[item.type]}
                     </span>
-                    <span className="min-w-0 w-full max-w-full overflow-hidden">
-                      <span className="block truncate text-sm font-semibold text-slate-900 group-hover:text-app-accent">
-                        {item.title}
-                      </span>
-                      <span className="mt-0.5 block text-[11px] text-slate-400">
-                        {TYPE_LABEL[item.type]} · {GROUP_LABEL[item.group] ?? GROUP_LABEL.general}
-                      </span>
-                      <span
-                        className="mt-1 block w-full overflow-hidden text-ellipsis whitespace-nowrap font-mono text-[11px] text-slate-500"
-                        title={item.target}
-                      >
-                        {item.target}
-                      </span>
+                    <span className="w-full truncate text-center text-[11px] font-medium leading-tight text-slate-800">
+                      {item.title}
                     </span>
                   </button>
-                  <div className="flex gap-1 border-t border-slate-100 px-2 py-1.5">
-                    <button
-                      type="button"
-                      className="rounded px-2 py-1 text-xs text-slate-500 hover:bg-slate-50 hover:text-slate-800"
-                      onClick={() => setDraft({ ...item })}
-                    >
-                      편집
-                    </button>
-                    <button
-                      type="button"
-                      className="rounded px-2 py-1 text-xs text-red-500 hover:bg-red-50"
-                      onClick={() => void removeItem(item)}
-                    >
-                      삭제
-                    </button>
-                  </div>
                 </div>
               );
             })}

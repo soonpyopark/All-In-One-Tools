@@ -16,6 +16,30 @@ contextBridge.exposeInMainWorld('frame', {
   showItemInFolder: (targetPath) => ipcRenderer.invoke('frame:showItemInFolder', targetPath),
   getAlwaysOnTop: () => ipcRenderer.invoke('frame:getAlwaysOnTop'),
   setAlwaysOnTop: (enabled) => ipcRenderer.invoke('frame:setAlwaysOnTop', enabled),
+  /**
+   * 플로팅 런처에서 편집 요청이 오면 콜백 호출.
+   * @param {(payload: { id: string }) => void} handler
+   * @returns {() => void} unsubscribe
+   */
+  onLauncherEditItem: (handler) => {
+    const listener = (_event, payload) => {
+      if (typeof handler === 'function') handler(payload ?? {});
+    };
+    ipcRenderer.on('launcher:edit-item', listener);
+    return () => ipcRenderer.removeListener('launcher:edit-item', listener);
+  },
+  /**
+   * 플로팅 등에서 목록이 바뀌면 콜백 호출.
+   * @param {(payload: { items: unknown[] }) => void} handler
+   * @returns {() => void} unsubscribe
+   */
+  onLauncherItemsChanged: (handler) => {
+    const listener = (_event, payload) => {
+      if (typeof handler === 'function') handler(payload ?? {});
+    };
+    ipcRenderer.on('launcher:items-changed', listener);
+    return () => ipcRenderer.removeListener('launcher:items-changed', listener);
+  },
   /** 끌어다 놓은 File 객체의 실제 경로 (파일 끌어놓기용). */
   getPathForFile: (file) => {
     try {

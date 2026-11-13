@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="ko">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>플로팅 런처</title>
+    <style>
+      :root {
+        color-scheme: dark;
+        --bar: rgba(36, 40, 48, 0.92);
+        --bar-dim: rgba(36, 40, 48, 0.55);
+        --text: #f3f4f6;
+        --muted: #9ca3af;
+        --line: rgba(255, 255, 255, 0.12);
+        --dash: rgba(156, 163, 175, 0.55);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html,
+      body {
+        margin: 0;
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+        font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
+        user-select: none;
+      }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        padding: 10px 14px 16px;
+      }
+      #bar {
+        display: inline-flex;
+        align-items: center;
+        gap: 10px;
+        min-height: 88px;
+        padding: 10px 14px 10px 10px;
+        border-radius: 18px;
+        background: var(--bar);
+        /* OS 그림자 대신 부드러운 레이어 그림자만 */
+        box-shadow:
+          0 1px 2px rgba(0, 0, 0, 0.18),
+          0 6px 16px rgba(0, 0, 0, 0.22);
+        transition: background 160ms ease, opacity 160ms ease;
+      }
+      #bar.dim {
+        background: var(--bar-dim);
+      }
+      #bar.drop-over {
+        background: rgba(37, 99, 235, 0.42);
+        box-shadow:
+          0 0 0 2px rgba(147, 197, 253, 0.95),
+          0 6px 16px rgba(0, 0, 0, 0.22);
+      }
+      #handle {
+        display: grid;
+        grid-template-columns: 1fr 1fr;
+        gap: 3px;
+        width: 14px;
+        padding: 6px 4px;
+        cursor: grab;
+        opacity: 0.55;
+      }
+      #handle:active {
+        cursor: grabbing;
+      }
+      #handle span {
+        width: 3px;
+        height: 3px;
+        border-radius: 50%;
+        background: #d1d5db;
+      }
+      #items {
+        display: flex;
+        align-items: flex-end;
+        gap: 10px;
+      }
+      .item {
+        position: relative;
+        width: 64px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        border: 0;
+        padding: 0;
+        background: transparent;
+        color: var(--text);
+        cursor: pointer;
+      }
+      .item:disabled {
+        opacity: 0.55;
+        cursor: default;
+      }
+      .glyph {
+        width: 48px;
+        height: 48px;
+        border-radius: 14px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 24px;
+        background: linear-gradient(145deg, #94a3b8, #334155);
+        box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+      }
+      .label {
+        width: 100%;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        text-align: center;
+        font-size: 11px;
+        line-height: 1.2;
+        color: var(--text);
+      }
+      .actions {
+        position: absolute;
+        top: -4px;
+        right: -2px;
+        display: none;
+        gap: 2px;
+      }
+      .item:hover .actions {
+        display: flex;
+      }
+      .actions button {
+        width: 16px;
+        height: 16px;
+        border: 0;
+        border-radius: 4px;
+        font-size: 10px;
+        line-height: 1;
+        cursor: pointer;
+        background: rgba(255, 255, 255, 0.92);
+        color: #374151;
+        padding: 0;
+      }
+      .actions button.del {
+        color: #dc2626;
+        font-weight: 700;
+      }
+      .divider {
+        width: 1px;
+        align-self: stretch;
+        margin: 8px 2px;
+        background: var(--line);
+      }
+      .add {
+        width: 64px;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 6px;
+        border: 0;
+        padding: 0;
+        background: transparent;
+        color: var(--muted);
+        cursor: copy;
+      }
+      .add .glyph {
+        border: 1.5px dashed var(--dash);
+        background: transparent;
+        box-shadow: none;
+        color: var(--muted);
+        font-size: 22px;
+        font-weight: 300;
+        transition: border-color 160ms ease, color 160ms ease, background 160ms ease;
+      }
+      .add .label {
+        width: 100%;
+        text-align: center;
+        font-size: 11px;
+        line-height: 1.2;
+        color: var(--muted);
+      }
+      #bar.drop-over .add .glyph {
+        border-color: #93c5fd;
+        color: #bfdbfe;
+        background: rgba(59, 130, 246, 0.22);
+      }
+      .empty {
+        color: var(--muted);
+        font-size: 12px;
+        padding: 0 8px;
+      }
+    </style>
+  </head>
+  <body>
+    <div id="bar">
+      <div id="handle" title="끌어서 이동" aria-label="끌어서 이동">
+        <span></span><span></span><span></span><span></span><span></span><span></span>
+      </div>
+      <div id="items"></div>
+      <div class="divider" aria-hidden="true"></div>
+      <button
+        type="button"
+        class="add"
+        id="addHint"
+        title="프로그램·바로가기·폴더, 파일을 여기에 끌어다 놓으세요"
+        aria-label="끌어다 놓기로 추가"
+      >
+        <span class="glyph">+</span>
+        <span class="label">추가</span>
+      </button>
+    </div>
+    <script>
+      const bridge = window.floatingLauncher;
+      const bar = document.getElementById('bar');
+      const itemsEl = document.getElementById('items');
+      const handle = document.getElementById('handle');
+      const addHint = document.getElementById('addHint');
+
+      let items = [];
+      let settings = { opacity: 0.88, sharpenOnHover: true };
+      let busyId = null;
+      let drag = null;
+      let addingDrops = false;
+      let dropDepth = 0;
+
+      /** shared/launcherColors.js 와 동일한 팔레트 (color id → 그라데이션) */
+      const COLOR_PALETTE = {
+        rose: ['#f472b6', '#ef4444'],
+        amber: ['#fbbf24', '#f97316'],
+        green: ['#4ade80', '#16a34a'],
+        sky: ['#38bdf8', '#2563eb'],
+        violet: ['#a78bfa', '#7c3aed'],
+        cyan: ['#22d3ee', '#0891b2'],
+        orange: ['#fb923c', '#c2410c'],
+        pink: ['#f9a8d4', '#db2777'],
+        lime: ['#a3e635', '#65a30d'],
+        indigo: ['#818cf8', '#4338ca'],
+        teal: ['#2dd4bf', '#0f766e'],
+        slate: ['#94a3b8', '#334155'],
+      };
+
+      /** @param {{ color?: string, colorFrom?: string, colorTo?: string }} item */
+      function glyphBackground(item) {
+        if (item.colorFrom && item.colorTo) {
+          return `linear-gradient(145deg, ${item.colorFrom}, ${item.colorTo})`;
+        }
+        const pair = COLOR_PALETTE[item.color] || COLOR_PALETTE.slate;
+        return `linear-gradient(145deg, ${pair[0]}, ${pair[1]})`;
+      }
+
+      /** 탐색기·브라우저에서 끌어오는 드롭인지 */
+      function isExternalAddDrag(event) {
+        const types = [...(event.dataTransfer?.types ?? [])];
+        return (
+          types.includes('Files') ||
+          types.includes('text/uri-list') ||
+          types.includes('text/plain')
+        );
+      }
+
+      /**
+       * file:// URL → 로컬 경로
+       * @param {string} href
+       */
+      function pathFromFileUrl(href) {
+        try {
+          const url = new URL(href);
+          if (url.protocol !== 'file:') return '';
+          let filePath = decodeURIComponent(url.pathname || '');
+          // Windows: /C:/Users/... → C:/Users/...
+          if (/^\/[A-Za-z]:\//.test(filePath)) filePath = filePath.slice(1);
+          return filePath.replace(/\//g, '\\');
+        } catch {
+          return '';
+        }
+      }
+
+      /** @param {DragEvent} event */
+      function entriesFromDrop(event) {
+        /** @type {string[]} */
+        const out = [];
+        const files = [...(event.dataTransfer?.files ?? [])];
+        for (const file of files) {
+          const filePath = bridge.getPathForFile?.(file);
+          if (filePath) out.push(filePath);
+        }
+
+        const uriList = String(event.dataTransfer?.getData('text/uri-list') || '');
+        for (const line of uriList.split(/\r?\n/)) {
+          const text = line.trim();
+          if (!text || text.startsWith('#')) continue;
+          if (/^https?:\/\//i.test(text)) {
+            out.push(text);
+            continue;
+          }
+          if (/^file:\/\//i.test(text)) {
+            const filePath = pathFromFileUrl(text);
+            if (filePath) out.push(filePath);
+          }
+        }
+
+        const plain = String(event.dataTransfer?.getData('text/plain') || '').trim();
+        if (/^https?:\/\//i.test(plain)) out.push(plain);
+        if (/^file:\/\//i.test(plain)) {
+          const filePath = pathFromFileUrl(plain);
+          if (filePath) out.push(filePath);
+        }
+
+        return [...new Set(out.filter(Boolean))];
+      }
+
+      function setDropOver(on) {
+        bar.classList.toggle('drop-over', Boolean(on));
+      }
+
+      /** @param {DragEvent} event */
+      async function addDroppedEntries(event) {
+        if (addingDrops) return;
+        const paths = entriesFromDrop(event);
+        setDropOver(false);
+        dropDepth = 0;
+        if (paths.length === 0) return;
+
+        addingDrops = true;
+        try {
+          const res = await bridge.api('launcher.addFromPaths', { paths });
+          if (Array.isArray(res?.items)) {
+            items = res.items;
+            render();
+          }
+        } catch (err) {
+          window.alert(err instanceof Error ? err.message : '끌어다 놓은 항목을 추가하지 못했습니다.');
+        } finally {
+          addingDrops = false;
+        }
+      }
+
+      function applyDim() {
+        const base = Number(settings.opacity) || 0.88;
+        if (settings.sharpenOnHover) {
+          bar.classList.add('dim');
+          bar.style.opacity = String(base);
+        } else {
+          bar.classList.remove('dim');
+          bar.style.opacity = String(base);
+        }
+      }
+
+      function applyHover(on) {
+        const base = Number(settings.opacity) || 0.88;
+        if (!settings.sharpenOnHover) {
+          bar.classList.remove('dim');
+          bar.style.opacity = String(base);
+          bridge.setHover(on);
+          return;
+        }
+        if (on) {
+          bar.classList.remove('dim');
+          bar.style.opacity = '1';
+        } else {
+          bar.classList.add('dim');
+          bar.style.opacity = String(base);
+        }
+        bridge.setHover(on);
+      }
+
+      function render() {
+        itemsEl.innerHTML = '';
+        if (!items.length) {
+          const empty = document.createElement('div');
+          empty.className = 'empty';
+          empty.textContent = '바로가기 없음';
+          itemsEl.appendChild(empty);
+          return;
+        }
+        for (const item of items) {
+          const btn = document.createElement('button');
+          btn.type = 'button';
+          btn.className = 'item';
+          btn.disabled = busyId === item.id;
+          btn.title = item.target || item.title;
+
+          const actions = document.createElement('div');
+          actions.className = 'actions';
+          const edit = document.createElement('button');
+          edit.type = 'button';
+          edit.title = '메인 런처에서 편집';
+          edit.textContent = '✎';
+          edit.addEventListener('click', (event) => {
+            event.stopPropagation();
+            void bridge.api('launcher.floating.edit', { id: item.id });
+          });
+          const del = document.createElement('button');
+          del.type = 'button';
+          del.className = 'del';
+          del.title = '삭제';
+          del.textContent = '×';
+          del.addEventListener('click', async (event) => {
+            event.stopPropagation();
+            try {
+              const res = await bridge.api('launcher.floating.remove', { id: item.id });
+              if (res?.cancelled) return;
+              items = Array.isArray(res?.items) ? res.items : items.filter((entry) => entry.id !== item.id);
+              render();
+            } catch {
+              /* ignore */
+            }
+          });
+          actions.appendChild(edit);
+          actions.appendChild(del);
+
+          const glyph = document.createElement('span');
+          glyph.className = 'glyph';
+          glyph.textContent = item.icon || '💻';
+          glyph.style.background = glyphBackground(item);
+          const label = document.createElement('span');
+          label.className = 'label';
+          label.textContent = item.title || '바로가기';
+
+          btn.appendChild(actions);
+          btn.appendChild(glyph);
+          btn.appendChild(label);
+          btn.addEventListener('click', async () => {
+            if (busyId) return;
+            busyId = item.id;
+            render();
+            try {
+              await bridge.api('launcher.open', { id: item.id });
+            } finally {
+              busyId = null;
+              render();
+            }
+          });
+          itemsEl.appendChild(btn);
+        }
+      }
+
+      handle.addEventListener('pointerdown', (event) => {
+        drag = { x: event.screenX, y: event.screenY };
+        handle.setPointerCapture(event.pointerId);
+      });
+      handle.addEventListener('pointermove', (event) => {
+        if (!drag) return;
+        const dx = event.screenX - drag.x;
+        const dy = event.screenY - drag.y;
+        drag = { x: event.screenX, y: event.screenY };
+        if (dx || dy) bridge.moveBy(dx, dy);
+      });
+      const endDrag = () => {
+        if (!drag) return;
+        drag = null;
+        bridge.moveEnd();
+      };
+      handle.addEventListener('pointerup', endDrag);
+      handle.addEventListener('pointercancel', endDrag);
+
+      bar.addEventListener('mouseenter', () => applyHover(true));
+      bar.addEventListener('mouseleave', () => applyHover(false));
+      bar.addEventListener('contextmenu', (event) => {
+        event.preventDefault();
+        bridge.contextMenu();
+      });
+
+      // 클릭 시 안내만 — 실제 추가는 끌어다 놓기
+      addHint.addEventListener('click', () => {
+        window.alert('프로그램·바로가기·폴더, 파일을 이 바로가기에 끌어다 놓으면 추가됩니다.');
+      });
+
+      // 프로그램·바로가기·폴더·URL 끌어다 놓기 (창 전체에서 수신)
+      const dropRoot = document.body;
+      dropRoot.addEventListener('dragenter', (event) => {
+        if (!isExternalAddDrag(event)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        dropDepth += 1;
+        setDropOver(true);
+        applyHover(true);
+      });
+      dropRoot.addEventListener('dragover', (event) => {
+        if (!isExternalAddDrag(event)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        event.dataTransfer.dropEffect = 'copy';
+        setDropOver(true);
+      });
+      dropRoot.addEventListener('dragleave', (event) => {
+        if (!isExternalAddDrag(event)) return;
+        event.preventDefault();
+        dropDepth = Math.max(0, dropDepth - 1);
+        if (dropDepth === 0) setDropOver(false);
+      });
+      dropRoot.addEventListener('drop', (event) => {
+        if (!isExternalAddDrag(event)) return;
+        event.preventDefault();
+        event.stopPropagation();
+        void addDroppedEntries(event);
+      });
+
+      bridge.onItems((payload) => {
+        items = Array.isArray(payload?.items) ? payload.items : [];
+        render();
+      });
+      bridge.onSettings((payload) => {
+        settings = { ...settings, ...(payload || {}) };
+        applyDim();
+      });
+
+      applyDim();
+      render();
+      bridge.ready();
+    </script>
+  </body>
+</html>

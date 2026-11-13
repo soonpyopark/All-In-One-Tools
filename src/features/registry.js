@@ -23,6 +23,7 @@ import PdfDedupPage from './cleanup/PdfDedupPage.jsx';
 import ClockPage from './clock/ClockPage.jsx';
 import ConvertPage from './convert/ConvertPage.jsx';
 import MergeGifsPage from './convert/MergeGifsPage.jsx';
+import DateCalcPage from './dateCalc/DateCalcPage.jsx';
 import HomePage from './home/HomePage.jsx';
 import LauncherPage from './launcher/LauncherPage.jsx';
 import OcrPage from './ocr/OcrPage.jsx';
@@ -124,12 +125,12 @@ export const FEATURES = [
     component: AdjustPage,
   },
   {
-    id: 'subnet',
-    label: '서브넷 계산기',
-    icon: '🧮',
-    description: 'IPv4 주소와 서브넷마스크로 네트워크·브로드캐스트 주소와 사용 가능한 호스트 범위를 계산합니다.',
-    color: ['#ffb454', '#e8791a'],
-    component: SubnetPage,
+    id: 'date-calc',
+    label: '날짜 계산기',
+    icon: '📅',
+    description: '두 날짜의 차이를 구하거나, 기간(년·월·일)을 더하고 빼서 계산합니다.',
+    color: ['#f9a8d4', '#db2777'],
+    component: DateCalcPage,
   },
   {
     id: 'clock',
@@ -138,6 +139,14 @@ export const FEATURES = [
     description: '현재 시각, 타이머, 알람을 사용합니다. 다른 메뉴에 있어도 알림이 울립니다.',
     color: ['#67e8f9', '#0891b2'],
     component: ClockPage,
+  },
+  {
+    id: 'subnet',
+    label: '서브넷 계산기',
+    icon: '🧮',
+    description: 'IPv4 주소와 서브넷마스크로 네트워크·브로드캐스트 주소와 사용 가능한 호스트 범위를 계산합니다.',
+    color: ['#ffb454', '#e8791a'],
+    component: SubnetPage,
   },
   {
     id: 'windows-system',

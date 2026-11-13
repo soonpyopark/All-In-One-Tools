@@ -119,6 +119,12 @@ export default function GeneralSettingsPanel() {
             onChange={(checked) => void save({ closeToTray: checked })}
           />
           <ToggleRow
+            label="시작 시 플로팅 런처 열기"
+            hint="프로그램을 실행하면 바탕화면 플로팅 런처를 함께 띄웁니다."
+            checked={Boolean(settings.floatingLauncherOnStart)}
+            onChange={(checked) => void save({ floatingLauncherOnStart: checked })}
+          />
+          <ToggleRow
             label="Windows / macOS 로그인 시 자동 실행"
             hint={
               settings.autoLaunchSupported

@@ -22,6 +22,11 @@ import {
   showMainWindow,
 } from './electron/trayService.js';
 import { hideTitleBarIcon } from './electron/windowIcon.js';
+import {
+  isFloatingLauncherSender,
+  persistFloatingLauncherState,
+  showFloatingLauncher,
+} from './electron/launcher/floatingWindow.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -147,6 +152,14 @@ async function boot() {
   setupMenu();
   registerIpc();
   createMainWindow();
+
+  if (getSettings().floatingLauncherOnStart === true) {
+    try {
+      showFloatingLauncher();
+    } catch (error) {
+      console.error('[floating-launcher] auto-start failed:', error);
+    }
+  }
 
   app.on('activate', () => {
     showMainWindow();
@@ -276,10 +289,12 @@ function setupMenu() {
 /* IPC — the only way the window talks to the backend (no network port)       */
 /* -------------------------------------------------------------------------- */
 
-/** Only this app's own page, in its own window, may call the backend. */
+/** Only this app's own page (or floating launcher window) may call the backend. */
 function isTrustedSender(event) {
   const win = BrowserWindow.fromWebContents(event.sender);
-  return Boolean(win) && !win.isDestroyed() && isAppUrl(event.senderFrame?.url ?? '');
+  if (!win || win.isDestroyed()) return false;
+  if (isFloatingLauncherSender(event)) return true;
+  return isAppUrl(event.senderFrame?.url ?? '');
 }
 
 /**
@@ -398,6 +413,7 @@ app.on('window-all-closed', () => {
 });
 
 app.on('before-quit', () => {
+  persistFloatingLauncherState();
   markQuitting();
   disposeTrayOnQuit();
   void devRenderer?.close().catch(() => undefined);

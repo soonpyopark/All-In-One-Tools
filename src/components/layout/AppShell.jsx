@@ -28,15 +28,6 @@ function formatSidebarDay(date) {
   return `${date.getMonth() + 1}월 ${date.getDate()}일 (${WEEKDAYS[date.getDay()]})`;
 }
 
-/** @returns {boolean} */
-function readSidebarCollapsed() {
-  try {
-    return window.localStorage.getItem(SIDEBAR_COLLAPSED_KEY) === '1';
-  } catch {
-    return false;
-  }
-}
-
 /** @param {boolean} collapsed */
 function writeSidebarCollapsed(collapsed) {
   try {
@@ -74,7 +65,8 @@ function AppShellInner() {
   const dialog = useDialog();
   const { runningByFeature } = useJobActivity();
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = useState(() => readSidebarCollapsed());
+  // 프로그램 시작 시 왼쪽 메뉴는 항상 접힌 상태
+  const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
   const [now, setNow] = useState(() => new Date());
   const mainRef = useRef(/** @type {HTMLElement | null} */ (null));
@@ -95,6 +87,8 @@ function AppShellInner() {
   );
   const [activeId, setActiveId] = useState(FEATURES[0]?.id ?? '');
   const active = features.find((feature) => feature.id === activeId) ?? features[0];
+  /** 플로팅 런처에서 요청한 바로가기 편집 id */
+  const [launcherEditId, setLauncherEditId] = useState(/** @type {string | null} */ (null));
 
   /** 한 번이라도 연 메뉴는 마운트 유지(작업·입력 목록 보존). */
   const [mountedIds, setMountedIds] = useState(() => new Set([FEATURES[0]?.id].filter(Boolean)));
@@ -124,6 +118,23 @@ function AppShellInner() {
     return () => {
       alive = false;
     };
+  }, []);
+
+  useEffect(() => {
+    const native = getNative();
+    if (!native?.onLauncherEditItem) return undefined;
+    return native.onLauncherEditItem((payload) => {
+      const id = String(payload?.id ?? '').trim();
+      if (!id) return;
+      setActiveId('launcher');
+      setMountedIds((prev) => {
+        if (prev.has('launcher')) return prev;
+        const next = new Set(prev);
+        next.add('launcher');
+        return next;
+      });
+      setLauncherEditId(id);
+    });
   }, []);
 
   const toggleSidebar = () => {
@@ -407,6 +418,10 @@ function AppShellInner() {
                     features={features}
                     onNavigate={goTo}
                     onReorder={feature.id === 'home' ? saveFeatureOrder : undefined}
+                    editItemId={feature.id === 'launcher' ? launcherEditId : undefined}
+                    onEditItemHandled={
+                      feature.id === 'launcher' ? () => setLauncherEditId(null) : undefined
+                    }
                   />
                 </div>
               );

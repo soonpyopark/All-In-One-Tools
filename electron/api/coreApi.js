@@ -66,6 +66,9 @@ export function registerCoreApi() {
     if ('accentColor' in body) patch.accentColor = normalizeAccentColor(body.accentColor);
     if ('startupUpdateCheck' in body) patch.startupUpdateCheck = Boolean(body.startupUpdateCheck);
     if ('closeToTray' in body) patch.closeToTray = Boolean(body.closeToTray);
+    if ('floatingLauncherOnStart' in body) {
+      patch.floatingLauncherOnStart = Boolean(body.floatingLauncherOnStart);
+    }
     if ('ffmpegDir' in body) patch.ffmpegDir = typeof body.ffmpegDir === 'string' ? body.ffmpegDir.trim() : '';
     if ('exportDir' in body) patch.exportDir = typeof body.exportDir === 'string' ? body.exportDir.trim() : '';
     if ('featureOrder' in body) patch.featureOrder = body.featureOrder;

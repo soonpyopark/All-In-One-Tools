@@ -6,7 +6,16 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { BrowserWindow, app, dialog, shell } from 'electron';
 import { APP_NAME } from '../../shared/constants.js';
+import { decorateLauncherItemsForUi } from '../../shared/launcherColors.js';
 import { ApiError, defineApi } from '../api/registry.js';
+import {
+  broadcastLauncherItemsChanged,
+  editItemFromFloating,
+  focusMainFromFloating,
+  hideFloatingLauncher,
+  removeItemFromFloating,
+  showFloatingLauncher,
+} from '../launcher/floatingWindow.js';
 import { resolveDroppedPath } from '../launcher/resolveDrop.js';
 import {
   addLauncherItems,
@@ -15,6 +24,15 @@ import {
   saveLauncherItems,
   upsertLauncherItem,
 } from '../launcher/store.js';
+
+/** 플로팅·메인 런처 목록을 함께 갱신합니다. */
+function notifyLauncherClients(items) {
+  try {
+    broadcastLauncherItemsChanged(items);
+  } catch {
+    // 창이 없어도 본 기능은 계속
+  }
+}
 
 const BACKUP_KIND = 'all-tools-launcher';
 
@@ -68,19 +86,31 @@ export function register() {
 
   defineApi('launcher.save', async (body) => {
     const items = await saveLauncherItems(body?.items);
+    notifyLauncherClients();
     return { items };
   });
 
   defineApi('launcher.upsert', async (body) => {
     try {
       const items = await upsertLauncherItem(body?.item ?? body);
+      notifyLauncherClients();
       return { items };
     } catch (err) {
       throw new ApiError(err instanceof Error ? err.message : String(err));
     }
   });
 
-  /** 탐색기·바탕화면에서 끌어다 놓은 경로들을 종류별로 바로 추가합니다. */
+  defineApi('launcher.floating.show', () => showFloatingLauncher());
+  defineApi('launcher.floating.hide', () => hideFloatingLauncher());
+  defineApi('launcher.floating.focusMain', () => focusMainFromFloating());
+  defineApi('launcher.floating.edit', (body) => editItemFromFloating(String(body?.id ?? '')));
+  defineApi('launcher.floating.remove', async (body) => {
+    const id = String(body?.id ?? '').trim();
+    if (!id) throw new ApiError('삭제할 항목이 없습니다.');
+    return removeItemFromFloating(id);
+  });
+
+  /** 탐색기·바탕화면·브라우저에서 끌어다 놓은 경로·URL을 종류별로 바로 추가합니다. */
   defineApi('launcher.addFromPaths', async (body) => {
     const paths = Array.isArray(body?.paths)
       ? body.paths.map((entry) => String(entry ?? '').trim()).filter(Boolean)
@@ -93,6 +123,27 @@ export function register() {
     const failures = [];
 
     for (const filePath of paths.slice(0, 50)) {
+      // 브라우저 등에서 끌어온 http(s) 주소
+      if (/^https?:\/\//i.test(filePath)) {
+        if (filePath.length > 2048) {
+          failures.push('주소가 너무 깁니다.');
+          continue;
+        }
+        let title = filePath;
+        try {
+          title = new URL(filePath).hostname || filePath;
+        } catch {
+          /* keep */
+        }
+        drafts.push({
+          type: 'url',
+          title: String(title).slice(0, 120),
+          target: filePath,
+          group: 'general',
+        });
+        continue;
+      }
+
       try {
         const resolved = resolveDroppedPath(filePath);
         drafts.push({
@@ -118,8 +169,10 @@ export function register() {
 
     try {
       const result = await addLauncherItems(drafts);
+      notifyLauncherClients();
       return {
-        items: result.items,
+        // 플로팅이 응답 items 로 다시 그릴 때 색이 기본값으로 덮이지 않도록 from/to 포함
+        items: decorateLauncherItemsForUi(result.items),
         added: result.added,
         skipped: result.skipped + failures.length,
         failures: failures.slice(0, 8),
@@ -133,6 +186,7 @@ export function register() {
     const id = String(body?.id ?? '');
     if (!id) throw new ApiError('삭제할 항목이 없습니다.');
     const items = await removeLauncherItem(id);
+    notifyLauncherClients();
     return { items };
   });
 
@@ -242,6 +296,7 @@ export function register() {
     }
 
     const items = await saveLauncherItems(nextRaw);
+    notifyLauncherClients();
     return { ok: true, mode, count: items.length, items };
   });
 }

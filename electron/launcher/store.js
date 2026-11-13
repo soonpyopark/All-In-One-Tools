@@ -1,5 +1,10 @@
 import { randomUUID } from 'node:crypto';
 import { PATH_FINDER_URL } from '../../shared/constants.js';
+import {
+  isLauncherColorId,
+  launcherColorIdFromItemId,
+  normalizeLauncherColorId,
+} from '../../shared/launcherColors.js';
 import { statePath } from '../context.js';
 import { readJsonSync, withFileLock, writeJsonSync } from '../jsonStore.js';
 
@@ -19,6 +24,7 @@ const DEFAULTS_VERSION = 1;
  *   target: string,
  *   icon: string,
  *   group: LauncherGroup,
+ *   color: string,
  * }} LauncherItem
  */
 
@@ -38,6 +44,7 @@ const BUILTIN_ITEMS = [
     target: PATH_FINDER_URL,
     icon: '🗺️',
     group: 'work',
+    color: 'sky',
   },
 ];
 
@@ -81,8 +88,11 @@ function normalizeItem(raw) {
   const group = normalizeGroup(src.group);
   const id =
     typeof src.id === 'string' && /^[A-Za-z0-9-]{1,64}$/.test(src.id) ? src.id : randomUUID();
+  const color = isLauncherColorId(src.color)
+    ? normalizeLauncherColorId(src.color)
+    : launcherColorIdFromItemId(id);
 
-  return { id, type, title, target, icon, group };
+  return { id, type, title, target, icon, group, color };
 }
 
 /** @param {LauncherItemType} type @param {string} target */
