@@ -19,6 +19,10 @@ let ipcBound = false;
 let suppressPositionPersist = false;
 /** @type {ReturnType<typeof setTimeout> | null} */
 let persistPositionTimer = null;
+/** @type {ReturnType<typeof setTimeout> | null} */
+let resizeAnimTimer = null;
+/** 접기/펼치기 창 크기 애니메이션 시간 (ms) */
+const COLLAPSE_ANIM_MS = 220;
 
 /** @returns {BrowserWindow | null} */
 function mainWindow() {
@@ -84,7 +88,7 @@ export function broadcastLauncherItemsChanged(items) {
 function applyWindowChrome(settings) {
   if (!floatWin || floatWin.isDestroyed()) return;
   floatWin.setAlwaysOnTop(Boolean(settings.alwaysOnTop), 'floating');
-  // 호버 선명 모드는 평소 설정 투명도, 올리면 창 불투명도 1
+  // 호버 선명 모드는 평소 설정 불투명도, 올리면 창 불투명도 1
   floatWin.setOpacity(settings.opacity);
 }
 
@@ -99,6 +103,8 @@ const FLOATING_PAGE_SIZE = 10;
  * @param {number} count
  */
 function estimateFloatingWidth(count) {
+  const settings = readFloatingSettings();
+  if (settings.collapsed) return 64;
   const total = Math.max(1, Number(count) || 1);
   const n = Math.min(total, FLOATING_PAGE_SIZE);
   const multi = total > FLOATING_PAGE_SIZE;
@@ -108,48 +114,173 @@ function estimateFloatingWidth(count) {
 }
 
 /**
- * 실제 DOM 크기에 맞춰 창을 키우고, 최대 1024px(또는 작업 영역)로 제한합니다.
- * @param {number} [count]
+ * 접기/펼치기. 렌더러 설정 반영 후 창 크기를 애니메이션으로 맞춥니다.
+ * @param {boolean} collapsed
  */
-function resizeToContent(count) {
+export async function setFloatingCollapsed(collapsed) {
+  await updateFloatingSettings({ collapsed: Boolean(collapsed) });
+  pushState();
+  // 접기: 아이콘 페이드 후 축소 / 펼치기: 레이아웃 잡힌 뒤 확대
+  setTimeout(
+    () => {
+      resizeToContent(listLauncherItems().length, { animate: true });
+    },
+    collapsed ? 150 : 80,
+  );
+  return { ok: true, collapsed: Boolean(collapsed) };
+}
+
+/** @param {number} t 0..1 */
+function easeOutCubic(t) {
+  return 1 - (1 - t) ** 3;
+}
+
+/**
+ * 왼쪽·하단 고정으로 창 크기를 보간합니다.
+ * @param {number} fixedLeft
+ * @param {number} fixedBottom
+ * @param {number} width
+ * @param {number} height
+ * @param {number} durationMs
+ */
+function animateWindowSize(fixedLeft, fixedBottom, width, height, durationMs) {
   if (!floatWin || floatWin.isDestroyed()) return;
+  if (resizeAnimTimer) {
+    clearTimeout(resizeAnimTimer);
+    resizeAnimTimer = null;
+  }
+  const start = floatWin.getBounds();
+  const targetW = width;
+  const targetH = height;
+  const t0 = Date.now();
+
+  const tick = () => {
+    if (!floatWin || floatWin.isDestroyed()) {
+      resizeAnimTimer = null;
+      return;
+    }
+    const p = Math.min(1, (Date.now() - t0) / durationMs);
+    const e = easeOutCubic(p);
+    const w = Math.round(start.width + (targetW - start.width) * e);
+    const h = Math.round(start.height + (targetH - start.height) * e);
+    floatWin.setBounds({
+      x: fixedLeft,
+      y: Math.round(fixedBottom - h),
+      width: Math.max(1, w),
+      height: Math.max(1, h),
+    });
+    if (p < 1) {
+      resizeAnimTimer = setTimeout(tick, 16);
+    } else {
+      resizeAnimTimer = null;
+      // 최종 픽셀 스냅
+      floatWin.setBounds({
+        x: fixedLeft,
+        y: Math.round(fixedBottom - targetH),
+        width: targetW,
+        height: targetH,
+      });
+    }
+  };
+  tick();
+}
+
+/**
+ * 실제 DOM 크기에 맞춰 창을 키우고, 최대 1024px(또는 작업 영역)로 제한합니다.
+ * 왼쪽·하단 모서리는 시작 시점 좌표로 고정해 접기/펼치기 때 우상단으로 밀리지 않게 합니다.
+ * @param {number} [count]
+ * @param {{ animate?: boolean }} [options]
+ */
+function resizeToContent(count, options = {}) {
+  if (!floatWin || floatWin.isDestroyed()) return;
+  const animate = Boolean(options.animate);
   const bounds = floatWin.getBounds();
   const display = screen.getDisplayMatching(bounds);
   const maxW = Math.min(FLOATING_MAX_WIDTH, Math.max(320, display.workArea.width - 24));
   const maxH = Math.max(120, display.workArea.height - 24);
+  const collapsed = readFloatingSettings().collapsed;
   const fallbackW = Math.min(estimateFloatingWidth(count ?? listLauncherItems().length), maxW);
-  // 가로 스크롤바·하단 패딩 포함 여유 높이
-  const fallbackH = 148;
+  // 가로 스크롤바·하단 패딩 포함 여유 높이 (접힘: 작은 핸들 알약)
+  const fallbackH = collapsed ? 56 : 148;
+  const minW = collapsed ? 48 : 200;
+  const minH = collapsed ? 48 : 100;
+  // 리사이즈 시작 시점의 왼쪽·하단 — 중간에 크기가 바뀌어도 이 기준을 유지
+  const fixedLeft = bounds.x;
+  const fixedBottom = bounds.y + bounds.height;
+
+  const clampSize = (width, height) => ({
+    width: Math.min(Math.max(Math.ceil(width), minW), maxW),
+    height: Math.min(Math.max(Math.ceil(height), minH), maxH),
+  });
 
   const apply = (width, height) => {
     if (!floatWin || floatWin.isDestroyed()) return;
+    const next = clampSize(width, height);
+    if (animate) {
+      animateWindowSize(fixedLeft, fixedBottom, next.width, next.height, COLLAPSE_ANIM_MS);
+      return;
+    }
+    if (resizeAnimTimer) {
+      clearTimeout(resizeAnimTimer);
+      resizeAnimTimer = null;
+    }
     floatWin.setBounds({
-      ...floatWin.getBounds(),
-      width: Math.min(Math.max(Math.ceil(width), 200), maxW),
-      height: Math.min(Math.max(Math.ceil(height), 100), maxH),
+      x: fixedLeft,
+      y: Math.round(fixedBottom - next.height),
+      width: next.width,
+      height: next.height,
     });
   };
 
+  // max-width:100% 때문에 작은 창에서 펼침 측정이 잘리면 애니메이션이 중간에 멈춤
+  // → 측정 중 max-width 해제 + scrollWidth 우선
+  const measureScript = `(() => {
+    const bar = document.getElementById('bar');
+    if (!bar) return null;
+    const body = document.body;
+    const cs = window.getComputedStyle(body);
+    const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+    const padY = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+    const prevMax = bar.style.maxWidth;
+    bar.style.maxWidth = 'none';
+    const barW = Math.max(bar.scrollWidth, bar.offsetWidth, bar.getBoundingClientRect().width);
+    const barH = Math.max(bar.scrollHeight, bar.offsetHeight, bar.getBoundingClientRect().height);
+    bar.style.maxWidth = prevMax;
+    return { width: Math.ceil(barW + padX), height: Math.ceil(barH + padY) };
+  })()`;
+
+  if (animate) {
+    // 애니메이션은 실측 한 번만 — 펼침 시 잘린 실측보다 예상 너비(fallback)를 하한으로
+    void floatWin.webContents
+      .executeJavaScript(measureScript)
+      .then((size) => {
+        if (!floatWin || floatWin.isDestroyed()) return;
+        const w = collapsed
+          ? size?.width || fallbackW
+          : Math.max(size?.width || 0, fallbackW);
+        const h = collapsed
+          ? size?.height || fallbackH
+          : Math.max(size?.height || 0, fallbackH);
+        apply(w, h);
+      })
+      .catch(() => {
+        apply(fallbackW, fallbackH);
+      });
+    return;
+  }
+
   apply(fallbackW, fallbackH);
 
-  // 렌더러가 그린 뒤 실측으로 한 번 더 맞춤
+  // 렌더러가 그린 뒤 실측으로 한 번 더 맞춤 (좌표 기준은 위 fixedLeft/Bottom 유지)
   void floatWin.webContents
-    .executeJavaScript(
-      `(() => {
-        const bar = document.getElementById('bar');
-        if (!bar) return null;
-        const body = document.body;
-        const cs = window.getComputedStyle(body);
-        const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
-        const padY = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
-        const barW = Math.max(bar.scrollWidth, bar.getBoundingClientRect().width);
-        const barH = Math.max(bar.scrollHeight, bar.getBoundingClientRect().height);
-        return { width: Math.ceil(barW + padX), height: Math.ceil(barH + padY) };
-      })()`,
-    )
+    .executeJavaScript(measureScript)
     .then((size) => {
       if (!size?.width || !floatWin || floatWin.isDestroyed()) return;
-      apply(size.width, size.height || fallbackH);
+      if (collapsed) {
+        apply(size.width, size.height || fallbackH);
+      } else {
+        apply(Math.max(size.width, fallbackW), Math.max(size.height || 0, fallbackH));
+      }
     })
     .catch(() => undefined);
 }
@@ -159,7 +290,14 @@ function showContextMenu() {
   const settings = readFloatingSettings();
   const menu = Menu.buildFromTemplate([
     {
-      label: '투명도',
+      label: settings.collapsed ? '펼치기' : '접기',
+      click: () => {
+        void setFloatingCollapsed(!settings.collapsed);
+      },
+    },
+    { type: 'separator' },
+    {
+      label: '불투명도',
       submenu: [0.5, 0.7, 0.85, 1].map((value) => ({
         label: `${Math.round(value * 100)}%`,
         type: 'radio',
@@ -197,10 +335,7 @@ function showContextMenu() {
     {
       label: '위치 초기화',
       click: () => {
-        void updateFloatingSettings({ x: null, y: null }).then(() => {
-          placeDefault();
-          pushState();
-        });
+        void resetFloatingPosition();
       },
     },
     {
@@ -232,6 +367,16 @@ function placeDefault() {
   // 높이 증가에 맞춰 하단 기준을 10px 위로 (작업 영역 하단에서 4px 위)
   const y = Math.round(work.y + work.height - bounds.height - 4);
   floatWin.setPosition(x, y);
+}
+
+/** 저장된 좌표를 지우고, 열려 있으면 기본 위치(하단 중앙)로 옮깁니다. */
+export async function resetFloatingPosition() {
+  await updateFloatingSettings({ x: null, y: null });
+  if (floatWin && !floatWin.isDestroyed()) {
+    placeDefault();
+    pushState();
+  }
+  return { ok: true };
 }
 
 /**
@@ -318,6 +463,16 @@ function bindIpcOnce() {
       return;
     }
     floatWin.setOpacity(hovering ? 1 : settings.opacity);
+  });
+
+  ipcMain.on('floating-launcher:set-collapsed', (event, collapsed) => {
+    if (!isFloatingLauncherSender(event)) return;
+    void setFloatingCollapsed(Boolean(collapsed));
+  });
+
+  ipcMain.on('floating-launcher:resize', (event) => {
+    if (!isFloatingLauncherSender(event)) return;
+    resizeToContent(listLauncherItems().length);
   });
 }
 

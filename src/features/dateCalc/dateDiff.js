@@ -150,6 +150,73 @@ export function normalizeDuration(years, months, days) {
  */
 
 /**
+ * 기준일 대비 목표일의 D-Day 를 계산합니다.
+ * (같은 날 = D-Day, 이전이면 D−N, 지났으면 D+N · 달력 일자 기준)
+ * includeToday 가 true 이면 기준일(오늘)을 하루로 포함해 N 이 1 커집니다.
+ * @param {{ year: number, month: number, day: number }} base
+ * @param {{ year: number, month: number, day: number }} target
+ * @param {{ includeToday?: boolean }} [options]
+ * @returns {{
+ *   offsetDays: number,
+ *   displayDays: number,
+ *   totalDaysAbs: number,
+ *   includeToday: boolean,
+ *   label: string,
+ *   detail: string,
+ *   swappedHint: boolean,
+ * }}
+ */
+export function calcDday(base, target, options = {}) {
+  if (!isValidDateParts(base.year, base.month, base.day)) {
+    throw new Error('기준 날짜가 올바르지 않습니다.');
+  }
+  if (!isValidDateParts(target.year, target.month, target.day)) {
+    throw new Error('목표 날짜가 올바르지 않습니다.');
+  }
+
+  const includeToday = Boolean(options.includeToday);
+  const offsetDays = Math.round((toUtcTime(target) - toUtcTime(base)) / 86_400_000);
+  const totalDaysAbs = Math.abs(offsetDays);
+  // 오늘 포함: 남은 날·지난 날에 기준일을 하루로 셈 (당일은 D-Day 유지)
+  const displayDays = offsetDays === 0 ? 0 : totalDaysAbs + (includeToday ? 1 : 0);
+  const includeHint = includeToday ? ' (오늘 포함)' : '';
+
+  if (offsetDays === 0) {
+    return {
+      offsetDays,
+      displayDays,
+      totalDaysAbs,
+      includeToday,
+      label: 'D-Day',
+      detail: includeToday
+        ? '기준일과 목표일이 같습니다. (오늘 포함해도 D-Day)'
+        : '기준일과 목표일이 같습니다.',
+      swappedHint: false,
+    };
+  }
+  if (offsetDays > 0) {
+    return {
+      offsetDays,
+      displayDays,
+      totalDaysAbs,
+      includeToday,
+      label: `D-${displayDays}`,
+      detail: `목표일까지 ${displayDays.toLocaleString('ko-KR')}일 남았습니다.${includeHint}`,
+      swappedHint: false,
+    };
+  }
+  return {
+    offsetDays,
+    displayDays,
+    totalDaysAbs,
+    includeToday,
+    label: `D+${displayDays}`,
+    detail: `목표일로부터 ${displayDays.toLocaleString('ko-KR')}일 지났습니다.${includeHint}`,
+    swappedHint: false,
+  };
+}
+
+/**
  * 기준 기간에 +/− 기간들을 적용합니다.
  * @param {DurationParts} base
  * @param {DurationTerm[]} terms

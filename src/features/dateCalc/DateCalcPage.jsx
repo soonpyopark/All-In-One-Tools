@@ -1,6 +1,12 @@
 import { useMemo, useState } from 'react';
-import { Section, btnClass, btnDangerClass, inputClass } from '../../components/settings/ui.jsx';
-import { applyDurationOps, diffCalendar, formatDuration, parsePart } from './dateDiff.js';
+import { Section, ToggleRow, btnClass, btnDangerClass, inputClass } from '../../components/settings/ui.jsx';
+import {
+  applyDurationOps,
+  calcDday,
+  diffCalendar,
+  formatDuration,
+  parsePart,
+} from './dateDiff.js';
 
 /**
  * @param {{
@@ -83,11 +89,12 @@ function newTerm(op = /** @type {'add' | 'sub'} */ ('sub')) {
 const MODE_TABS = [
   { id: 'span', label: '날짜 차이' },
   { id: 'duration', label: '기간 더하기·빼기' },
+  { id: 'dday', label: 'D-Day 계산기' },
 ];
 
-/** 날짜 계산기: 날짜 차이 + 기간(년·월·일) 가감. */
+/** 날짜 계산기: 날짜 차이 + 기간 가감 + D-Day. */
 export default function DateCalcPage() {
-  const [mode, setMode] = useState(/** @type {'span' | 'duration'} */ ('span'));
+  const [mode, setMode] = useState(/** @type {'span' | 'duration' | 'dday'} */ ('span'));
 
   const today = todayParts();
   const [startYear, setStartYear] = useState(today.year);
@@ -104,6 +111,15 @@ export default function DateCalcPage() {
     { id: 'term-init-1', op: /** @type {'add' | 'sub'} */ ('sub'), year: '1', month: '9', day: '0' },
     { id: 'term-init-2', op: /** @type {'add' | 'sub'} */ ('sub'), year: '2', month: '2', day: '28' },
   ]);
+
+  const [ddayBaseYear, setDdayBaseYear] = useState(today.year);
+  const [ddayBaseMonth, setDdayBaseMonth] = useState(today.month);
+  const [ddayBaseDay, setDdayBaseDay] = useState(today.day);
+  const [ddayTargetYear, setDdayTargetYear] = useState(today.year);
+  const [ddayTargetMonth, setDdayTargetMonth] = useState(today.month);
+  const [ddayTargetDay, setDdayTargetDay] = useState(today.day);
+  /** 남은/지난 날 수에 기준일(오늘)을 하루로 포함할지 */
+  const [ddayIncludeToday, setDdayIncludeToday] = useState(false);
 
   const spanShown = useMemo(() => {
     try {
@@ -140,8 +156,71 @@ export default function DateCalcPage() {
     );
   }, [baseYear, baseMonth, baseDay, terms]);
 
+  const ddayShown = useMemo(() => {
+    try {
+      return calcDday(
+        {
+          year: parsePart(ddayBaseYear, 0),
+          month: parsePart(ddayBaseMonth, 0),
+          day: parsePart(ddayBaseDay, 0),
+        },
+        {
+          year: parsePart(ddayTargetYear, 0),
+          month: parsePart(ddayTargetMonth, 0),
+          day: parsePart(ddayTargetDay, 0),
+        },
+        { includeToday: ddayIncludeToday },
+      );
+    } catch {
+      return null;
+    }
+  }, [
+    ddayBaseYear,
+    ddayBaseMonth,
+    ddayBaseDay,
+    ddayTargetYear,
+    ddayTargetMonth,
+    ddayTargetDay,
+    ddayIncludeToday,
+  ]);
+
+  const ddaySpan = useMemo(() => {
+    if (!ddayShown || ddayShown.offsetDays === 0) return null;
+    try {
+      return diffCalendar(
+        {
+          year: parsePart(ddayBaseYear, 0),
+          month: parsePart(ddayBaseMonth, 0),
+          day: parsePart(ddayBaseDay, 0),
+        },
+        {
+          year: parsePart(ddayTargetYear, 0),
+          month: parsePart(ddayTargetMonth, 0),
+          day: parsePart(ddayTargetDay, 0),
+        },
+      );
+    } catch {
+      return null;
+    }
+  }, [
+    ddayShown,
+    ddayBaseYear,
+    ddayBaseMonth,
+    ddayBaseDay,
+    ddayTargetYear,
+    ddayTargetMonth,
+    ddayTargetDay,
+  ]);
+
   const updateTerm = (id, patch) => {
     setTerms((prev) => prev.map((term) => (term.id === id ? { ...term, ...patch } : term)));
+  };
+
+  const setDdayBaseToday = () => {
+    const now = todayParts();
+    setDdayBaseYear(now.year);
+    setDdayBaseMonth(now.month);
+    setDdayBaseDay(now.day);
   };
 
   return (
@@ -150,7 +229,7 @@ export default function DateCalcPage() {
         <section>
           <h1 className="m-0 text-xl font-semibold text-slate-900">날짜 계산기</h1>
           <p className="mt-1 text-sm text-slate-500">
-            두 날짜의 차이를 구하거나, 기간(년·월·일)을 더하고 빼서 계산합니다.
+            날짜 차이, 기간 가감, D-Day(남은 날·지난 날)를 계산합니다.
           </p>
           <div className="mt-3 flex flex-wrap gap-1 rounded-lg border border-slate-200 bg-slate-50 p-1">
             {MODE_TABS.map((tab) => {
@@ -165,7 +244,7 @@ export default function DateCalcPage() {
                       : 'text-slate-600 hover:text-slate-900'
                   }`}
                   aria-pressed={selected}
-                  onClick={() => setMode(/** @type {'span' | 'duration'} */ (tab.id))}
+                  onClick={() => setMode(/** @type {'span' | 'duration' | 'dday'} */ (tab.id))}
                 >
                   {tab.label}
                 </button>
@@ -220,7 +299,9 @@ export default function DateCalcPage() {
               )}
             </Section>
           </>
-        ) : (
+        ) : null}
+
+        {mode === 'duration' ? (
           <>
             <Section
               title="기간 연산"
@@ -344,7 +425,89 @@ export default function DateCalcPage() {
               </div>
             </Section>
           </>
-        )}
+        ) : null}
+
+        {mode === 'dday' ? (
+          <>
+            <Section
+              title="D-Day 입력"
+              description="기준일에서 목표일까지 남은 날(D−N)·당일(D-Day)·지난 날(D+N)을 바로 계산합니다."
+            >
+              <div className="space-y-3">
+                <div className="flex flex-wrap items-center justify-between gap-2">
+                  <p className="m-0 text-xs text-slate-500">기준일은 보통 오늘입니다.</p>
+                  <button type="button" className={btnClass} onClick={setDdayBaseToday}>
+                    기준일을 오늘로
+                  </button>
+                </div>
+                <div className="grid gap-3 lg:grid-cols-[1fr_auto_1fr] lg:items-center">
+                  <YmdFields
+                    label="기준일"
+                    year={ddayBaseYear}
+                    month={ddayBaseMonth}
+                    day={ddayBaseDay}
+                    onYear={setDdayBaseYear}
+                    onMonth={setDdayBaseMonth}
+                    onDay={setDdayBaseDay}
+                    yearMin={1}
+                  />
+                  <div className="hidden text-center text-slate-400 lg:block" aria-hidden>
+                    →
+                  </div>
+                  <YmdFields
+                    label="목표일"
+                    year={ddayTargetYear}
+                    month={ddayTargetMonth}
+                    day={ddayTargetDay}
+                    onYear={setDdayTargetYear}
+                    onMonth={setDdayTargetMonth}
+                    onDay={setDdayTargetDay}
+                    yearMin={1}
+                  />
+                </div>
+              </div>
+            </Section>
+
+            <Section title="결과">
+              <div className="space-y-4">
+                <ToggleRow
+                  label="오늘 포함"
+                  hint="남은 날·지난 날에 기준일(오늘)을 하루로 셉니다. 예: 달력 차이 4일이면 D−5."
+                  checked={ddayIncludeToday}
+                  onChange={setDdayIncludeToday}
+                />
+                {ddayShown ? (
+                  <div className="space-y-2">
+                    <p
+                      className={`m-0 text-4xl font-semibold tracking-tight tabular-nums ${
+                        ddayShown.offsetDays === 0
+                          ? 'text-app-accent'
+                          : ddayShown.offsetDays > 0
+                            ? 'text-slate-900'
+                            : 'text-slate-600'
+                      }`}
+                    >
+                      {ddayShown.label}
+                    </p>
+                    <p className="m-0 text-sm text-slate-500">{ddayShown.detail}</p>
+                    {ddayIncludeToday && ddayShown.offsetDays !== 0 ? (
+                      <p className="m-0 text-xs text-slate-400">
+                        오늘 미포함이면 {ddayShown.offsetDays > 0 ? `D−${ddayShown.totalDaysAbs}` : `D+${ddayShown.totalDaysAbs}`}
+                      </p>
+                    ) : null}
+                    {ddaySpan ? (
+                      <p className="m-0 text-xs text-slate-400">
+                        달력 차이 {ddaySpan.label} · 총 {ddaySpan.totalDays.toLocaleString('ko-KR')}일
+                      </p>
+                    ) : null}
+                  </div>
+                ) : (
+                  <p className="m-0 text-sm text-slate-500">올바른 년·월·일을 입력하면 결과가 표시됩니다.</p>
+                )}
+              </div>
+            </Section>
+          </>
+        ) : null}
       </div>
     </div>
   );

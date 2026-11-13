@@ -1,6 +1,6 @@
 /**
  * 플로팅 런처 창 위치·표시 옵션 저장.
- * 마지막에 쓰던 위치·투명도·항상 위·호버 선명 값을 다음에 그대로 불러옵니다.
+ * 마지막에 쓰던 위치·불투명도·항상 위·호버 선명 값을 다음에 그대로 불러옵니다.
  */
 import { statePath } from '../context.js';
 import { readJsonSync, withFileLock, writeJsonSync } from '../jsonStore.js';
@@ -14,6 +14,7 @@ const STORE_FILE = 'floating-launcher.json';
  *   opacity: number,
  *   sharpenOnHover: boolean,
  *   alwaysOnTop: boolean,
+ *   collapsed: boolean,
  * }} FloatingLauncherSettings
  */
 
@@ -22,9 +23,10 @@ function defaults() {
   return {
     x: null,
     y: null,
-    opacity: 0.88,
+    opacity: 1,
     sharpenOnHover: true,
     alwaysOnTop: true,
+    collapsed: false,
   };
 }
 
@@ -45,6 +47,7 @@ function normalize(raw) {
     opacity: Number.isFinite(opacity) ? Math.min(1, Math.max(0.35, opacity)) : base.opacity,
     sharpenOnHover: src.sharpenOnHover !== false,
     alwaysOnTop: src.alwaysOnTop !== false,
+    collapsed: src.collapsed === true,
   };
 }
 

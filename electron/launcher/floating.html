@@ -29,8 +29,9 @@
       }
       body {
         display: flex;
-        align-items: center;
-        justify-content: center;
+        /* 창 왼쪽·아래에 바를 붙여, 접을 때 왼쪽으로 빨려가지 않게 함 */
+        align-items: flex-end;
+        justify-content: flex-start;
         padding: 10px 14px 16px;
       }
       #bar {
@@ -47,7 +48,13 @@
         box-shadow:
           0 1px 2px rgba(0, 0, 0, 0.18),
           0 6px 16px rgba(0, 0, 0, 0.22);
-        transition: background 160ms ease, opacity 160ms ease;
+        transition:
+          background 160ms ease,
+          opacity 160ms ease,
+          padding 220ms cubic-bezier(0.22, 1, 0.36, 1),
+          border-radius 220ms cubic-bezier(0.22, 1, 0.36, 1),
+          min-height 220ms cubic-bezier(0.22, 1, 0.36, 1),
+          gap 220ms cubic-bezier(0.22, 1, 0.36, 1);
       }
       #bar.dragging-window {
         cursor: grabbing;
@@ -76,15 +83,59 @@
         cursor: grab;
         opacity: 0.55;
         flex: 0 0 auto;
+        border-radius: 8px;
+        transition:
+          width 220ms cubic-bezier(0.22, 1, 0.36, 1),
+          padding 220ms cubic-bezier(0.22, 1, 0.36, 1),
+          opacity 160ms ease,
+          background 160ms ease;
       }
       #handle:active {
         cursor: grabbing;
+      }
+      #handle:hover {
+        opacity: 0.9;
+        background: rgba(255, 255, 255, 0.06);
       }
       #handle span {
         width: 3px;
         height: 3px;
         border-radius: 50%;
         background: #d1d5db;
+      }
+      #row > :not(#handle) {
+        transform-origin: left center;
+        transition:
+          opacity 150ms ease,
+          transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      /* 접히기 직전: 아이콘 페이드 아웃 */
+      #bar.is-collapsing #row > :not(#handle) {
+        opacity: 0;
+        transform: translateX(-8px) scale(0.96);
+        pointer-events: none;
+      }
+      /* 펼친 직후: 아이콘 페이드 인 */
+      #bar.is-expanding #row > :not(#handle) {
+        opacity: 0;
+        transform: translateX(-8px) scale(0.96);
+        pointer-events: none;
+      }
+      /* 접힘: 핸들 알약만 남김 */
+      #bar.collapsed {
+        min-height: 0;
+        padding: 10px 12px;
+        border-radius: 14px;
+        gap: 0;
+      }
+      #bar.collapsed #row > :not(#handle) {
+        display: none !important;
+      }
+      #bar.collapsed #handle {
+        width: 22px;
+        padding: 12px 7px;
+        opacity: 0.9;
+        cursor: pointer;
       }
       .page-nav {
         width: 22px;
@@ -275,7 +326,12 @@
   <body>
     <div id="bar">
       <div id="row">
-        <div id="handle" title="끌어서 이동" aria-label="끌어서 이동">
+        <div
+          id="handle"
+          title="클릭하여 접기 · 끌어서 이동"
+          aria-label="클릭하여 접기 또는 끌어서 이동"
+          role="button"
+        >
           <span></span><span></span><span></span><span></span><span></span><span></span>
         </div>
         <button type="button" class="page-nav" id="prevPage" title="이전 페이지" aria-label="이전 페이지">
@@ -316,7 +372,7 @@
       const PAGE_SIZE = 10;
 
       let items = [];
-      let settings = { opacity: 0.88, sharpenOnHover: true };
+      let settings = { opacity: 1, sharpenOnHover: true, collapsed: false };
       let busyId = null;
       let drag = null;
       let addingDrops = false;
@@ -324,6 +380,10 @@
       let reorderId = null;
       let skipNextOpen = false;
       let pageIndex = 0;
+      /** 창 드래그가 실제로 움직였는지 (핸들 클릭 접기 구분용) */
+      let windowDragMoved = false;
+      /** 이번 포인터 다운이 핸들에서 시작했는지 */
+      let dragFromHandle = false;
 
       const COLOR_PALETTE = {
         rose: ['#f472b6', '#ef4444'],
@@ -485,8 +545,60 @@
         }
       }
 
+      function applyCollapsedUi() {
+        const collapsed = Boolean(settings.collapsed);
+        bar.classList.toggle('collapsed', collapsed);
+        handle.title = collapsed
+          ? '클릭하여 펼치기 · 끌어서 이동'
+          : '클릭하여 접기 · 끌어서 이동';
+        handle.setAttribute(
+          'aria-label',
+          collapsed ? '클릭하여 펼치기 또는 끌어서 이동' : '클릭하여 접기 또는 끌어서 이동',
+        );
+        handle.setAttribute('aria-expanded', collapsed ? 'false' : 'true');
+      }
+
+      /** 접기/펼치기 애니메이션 중이면 중복 토글 무시 */
+      let collapseAnimating = false;
+
+      function toggleCollapsed() {
+        if (collapseAnimating) return;
+        const next = !settings.collapsed;
+        collapseAnimating = true;
+
+        if (next) {
+          // 접기: 아이콘 페이드 → collapsed → 창 축소 애니메이션
+          bar.classList.add('is-collapsing');
+          window.setTimeout(() => {
+            settings = { ...settings, collapsed: true };
+            bar.classList.remove('is-collapsing');
+            applyCollapsedUi();
+            bridge.setCollapsed(true);
+            window.setTimeout(() => {
+              collapseAnimating = false;
+            }, 260);
+          }, 150);
+          return;
+        }
+
+        // 펼치기: 내용 표시 → 창 확대 애니메이션 → 아이콘 페이드 인
+        settings = { ...settings, collapsed: false };
+        applyCollapsedUi();
+        clampPage();
+        render();
+        bar.classList.add('is-expanding');
+        bridge.setCollapsed(false);
+        // 창 확대(약 80+220ms) 후에 아이콘이 나타나게
+        window.setTimeout(() => {
+          bar.classList.remove('is-expanding');
+        }, 200);
+        window.setTimeout(() => {
+          collapseAnimating = false;
+        }, 360);
+      }
+
       function applyDim() {
-        const base = Number(settings.opacity) || 0.88;
+        const base = Number(settings.opacity) || 1;
         if (settings.sharpenOnHover) {
           bar.classList.add('dim');
           bar.style.opacity = String(base);
@@ -497,7 +609,7 @@
       }
 
       function applyHover(on) {
-        const base = Number(settings.opacity) || 0.88;
+        const base = Number(settings.opacity) || 1;
         if (!settings.sharpenOnHover) {
           bar.classList.remove('dim');
           bar.style.opacity = String(base);
@@ -518,6 +630,8 @@
         const max = pageCount() - 1;
         pageIndex = Math.min(max, Math.max(0, next));
         render();
+        // 페이지마다 아이콘 수가 달라 창 너비를 다시 맞춤 (잘림·빈 여백 방지)
+        requestAnimationFrame(() => bridge.requestResize());
       }
 
       function renderPager() {
@@ -680,6 +794,8 @@
         if (event.button !== 0) return;
         if (!canDragWindow(event)) return;
         drag = { x: event.screenX, y: event.screenY };
+        windowDragMoved = false;
+        dragFromHandle = Boolean(event.target instanceof Element && event.target.closest('#handle'));
         bar.classList.add('dragging-window');
         bar.setPointerCapture(event.pointerId);
       });
@@ -688,13 +804,24 @@
         const dx = event.screenX - drag.x;
         const dy = event.screenY - drag.y;
         drag = { x: event.screenX, y: event.screenY };
-        if (dx || dy) bridge.moveBy(dx, dy);
+        if (dx || dy) {
+          if (Math.abs(dx) + Math.abs(dy) >= 3) windowDragMoved = true;
+          bridge.moveBy(dx, dy);
+        }
       });
-      const endWindowDrag = () => {
+      const endWindowDrag = (event) => {
         if (!drag) return;
+        const fromHandle = dragFromHandle;
+        const moved = windowDragMoved;
         drag = null;
+        dragFromHandle = false;
+        windowDragMoved = false;
         bar.classList.remove('dragging-window');
         bridge.moveEnd();
+        // 핸들을 클릭만 했을 때 접기/펼치기 (드래그와 구분)
+        if (fromHandle && !moved && event?.type === 'pointerup') {
+          toggleCollapsed();
+        }
       };
       bar.addEventListener('pointerup', endWindowDrag);
       bar.addEventListener('pointercancel', endWindowDrag);
@@ -740,6 +867,12 @@
         dropDepth += 1;
         setDropOver(true);
         applyHover(true);
+        // 접힌 채 파일을 끌어오면 펼쳐서 드롭 가능하게 (호버 깜빡임과 달리 드롭 종료까지 유지)
+        if (settings.collapsed && dropDepth === 1) {
+          settings = { ...settings, collapsed: false };
+          applyCollapsedUi();
+          bridge.setCollapsed(false);
+        }
       });
       dropRoot.addEventListener('dragover', (event) => {
         if (!isExternalAddDrag(event)) return;
@@ -767,11 +900,19 @@
         render();
       });
       bridge.onSettings((payload) => {
+        const wasCollapsed = Boolean(settings.collapsed);
         settings = { ...settings, ...(payload || {}) };
         applyDim();
+        applyCollapsedUi();
+        // 우클릭 메뉴로 펼친 경우 페이지만 다시 그림 (리사이즈는 메인이 담당)
+        if (wasCollapsed && !settings.collapsed) {
+          clampPage();
+          render();
+        }
       });
 
       applyDim();
+      applyCollapsedUi();
       render();
       bridge.ready();
     </script>

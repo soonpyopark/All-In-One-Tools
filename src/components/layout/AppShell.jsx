@@ -204,10 +204,20 @@ function AppShellInner() {
     } else {
       const ok = await dialog.confirm({
         title: '화면 초기화',
-        body: `${active.label}의 선택한 파일과 옵션을 모두 처음 상태로 되돌립니다.`,
+        body:
+          active.id === 'launcher'
+            ? `${active.label} 화면을 처음 상태로 되돌리고, 플로팅 런처 위치도 기본 위치(하단 중앙)로 초기화합니다.`
+            : `${active.label}의 선택한 파일과 옵션을 모두 처음 상태로 되돌립니다.`,
         confirmLabel: '초기화',
       });
       if (!ok) return;
+    }
+    if (active.id === 'launcher') {
+      try {
+        await api('launcher.floating.resetPosition');
+      } catch {
+        // 위치 초기화 실패해도 화면 초기화는 진행
+      }
     }
     setResetKeys((prev) => ({
       ...prev,

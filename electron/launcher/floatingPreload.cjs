@@ -27,6 +27,10 @@ contextBridge.exposeInMainWorld('floatingLauncher', {
   /** 드래그 종료 시 최종 위치를 디스크에 바로 저장합니다. */
   moveEnd: () => ipcRenderer.send('floating-launcher:move-end'),
   setHover: (hovering) => ipcRenderer.send('floating-launcher:hover', Boolean(hovering)),
+  /** 접기/펼치기 (작은 핸들만 남기기) */
+  setCollapsed: (collapsed) => ipcRenderer.send('floating-launcher:set-collapsed', Boolean(collapsed)),
+  /** DOM 변경 후 창 크기 재측정 */
+  requestResize: () => ipcRenderer.send('floating-launcher:resize'),
   /** 탐색기에서 끌어다 놓은 File 의 실제 경로 */
   getPathForFile: (file) => {
     try {

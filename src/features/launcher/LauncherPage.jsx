@@ -665,7 +665,7 @@ export default function LauncherPage({ editItemId = null, onEditItemHandled } = 
               className={btnPrimaryClass}
               onClick={() => void openFloatingLauncher()}
             >
-              플로팅 런처
+              플로팅 런처 실행
             </button>
           </div>
         </section>

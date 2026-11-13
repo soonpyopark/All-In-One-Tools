@@ -136,7 +136,21 @@ Set-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name ScreenSaveActive -V
 }
 
 /**
- * 현재 로그온 로컬 사용자 비밀번호 변경 (현재 비밀번호 검증 후).
+ * DOMAIN\user / user@domain → 로컬 SAM 사용자 이름만 남깁니다.
+ * @param {string} raw
+ */
+function localSamUserName(raw) {
+  const value = String(raw || '').trim();
+  if (!value) return '';
+  if (value.includes('\\')) return value.split('\\').pop() || value;
+  if (value.includes('@')) return value.split('@')[0] || value;
+  return value;
+}
+
+/**
+ * 현재 로그온 로컬 사용자 비밀번호 변경.
+ * Set-LocalUser(관리자 필요) 대신 UserPrincipal.ChangePassword 로
+ * 본인이 현재 비밀번호를 알고 있을 때 스스로 변경합니다.
  * @param {string} currentPassword
  * @param {string} newPassword
  */
@@ -152,7 +166,7 @@ async function changeLocalPassword(currentPassword, newPassword) {
     throw new ApiError('새 비밀번호는 현재 비밀번호와 달라야 합니다.');
   }
 
-  const user = os.userInfo().username || process.env.USERNAME || '';
+  const user = localSamUserName(os.userInfo().username || process.env.USERNAME || '');
   if (!user) throw new ApiError('현재 Windows 사용자 이름을 확인할 수 없습니다.');
 
   // JSON 문자열로 넣어 특수문자·따옴표 이스케이프
@@ -169,16 +183,25 @@ $currentPlain = ${currentLit}
 $newPlain = ${passLit}
 
 Add-Type -AssemblyName System.DirectoryServices.AccountManagement
-$ctx = New-Object System.DirectoryServices.AccountManagement.PrincipalContext([System.DirectoryServices.AccountManagement.ContextType]::Machine)
-if (-not $ctx.ValidateCredentials($userName, $currentPlain)) {
-  throw '현재 비밀번호가 올바르지 않습니다.'
-}
-
-$secure = ConvertTo-SecureString -String $newPlain -AsPlainText -Force
+$machine = [System.DirectoryServices.AccountManagement.ContextType]::Machine
+$ctx = New-Object System.DirectoryServices.AccountManagement.PrincipalContext($machine)
 try {
-  Set-LocalUser -Name $userName -Password $secure
-} catch {
-  throw $_.Exception.Message
+  if (-not $ctx.ValidateCredentials($userName, $currentPlain)) {
+    throw '현재 비밀번호가 올바르지 않습니다.'
+  }
+
+  $principal = [System.DirectoryServices.AccountManagement.UserPrincipal]::FindByIdentity($ctx, $userName)
+  if ($null -eq $principal) {
+    throw 'LOCAL_USER_NOT_FOUND'
+  }
+  try {
+    # 본인 비밀번호 변경 — 관리자 권한(Set-LocalUser) 불필요
+    $principal.ChangePassword($currentPlain, $newPlain)
+  } finally {
+    $principal.Dispose()
+  }
+} finally {
+  $ctx.Dispose()
 }
 `,
       { timeoutMs: 45_000 },
@@ -188,12 +211,27 @@ try {
     if (/현재 비밀번호가 올바르지 않습니다/.test(message)) {
       throw new ApiError('현재 비밀번호가 올바르지 않습니다.');
     }
-    if (/Microsoft|AzureAD|domain|도메인|Access is denied|액세스가 거부|administrator|관리자/i.test(message)) {
+    if (/LOCAL_USER_NOT_FOUND/i.test(message)) {
       throw new ApiError(
-        '로컬 계정 비밀번호만 변경할 수 있습니다. Microsoft 계정이거나 권한이 부족하면 Windows 설정 → 계정에서 변경해 주세요.',
+        '이 PC의 로컬 계정을 찾지 못했습니다. Microsoft 계정으로 로그인한 경우 Windows 설정 → 계정에서 변경해 주세요.',
       );
     }
-    throw new ApiError(message || '비밀번호 변경에 실패했습니다.');
+    if (/password.*complex|complexity|암호.*복잡|최소.*길이|history|최근.*암호/i.test(message)) {
+      throw new ApiError(
+        '새 비밀번호가 Windows 암호 복잡도·기록 정책에 맞지 않습니다. 더 복잡하거나 다른 비밀번호로 다시 시도해 주세요.',
+      );
+    }
+    if (/Access is denied|액세스가 거부|0x80070005|unauthorized|권한/i.test(message)) {
+      throw new ApiError(
+        '비밀번호 변경 권한이 없습니다. 관리자 계정으로 로그온했는지 확인하거나 Windows 설정 → 계정에서 변경해 주세요.',
+      );
+    }
+    // PowerShell 긴 스택 대신 첫 줄·핵심만
+    const short = message
+      .split(/\r?\n/)
+      .map((line) => line.trim())
+      .find((line) => line && !/^At |^CategoryInfo|^FullyQualifiedErrorId|^PowerShell/i.test(line));
+    throw new ApiError(short || '비밀번호 변경에 실패했습니다.');
   }
 }
 

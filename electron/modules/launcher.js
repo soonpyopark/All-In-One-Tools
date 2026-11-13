@@ -14,6 +14,7 @@ import {
   focusMainFromFloating,
   hideFloatingLauncher,
   removeItemFromFloating,
+  resetFloatingPosition,
   showFloatingLauncher,
 } from '../launcher/floatingWindow.js';
 import { resolveDroppedPath } from '../launcher/resolveDrop.js';
@@ -103,6 +104,7 @@ export function register() {
   defineApi('launcher.floating.show', () => showFloatingLauncher());
   defineApi('launcher.floating.hide', () => hideFloatingLauncher());
   defineApi('launcher.floating.focusMain', () => focusMainFromFloating());
+  defineApi('launcher.floating.resetPosition', () => resetFloatingPosition());
   defineApi('launcher.floating.edit', (body) => editItemFromFloating(String(body?.id ?? '')));
   defineApi('launcher.floating.remove', async (body) => {
     const id = String(body?.id ?? '').trim();

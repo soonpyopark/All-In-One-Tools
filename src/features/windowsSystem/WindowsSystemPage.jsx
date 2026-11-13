@@ -170,7 +170,7 @@ export default function WindowsSystemPage() {
     }
     const ok = await dialog.confirm({
       title: '비밀번호 설정',
-      body: `${username ? `"${username}" ` : ''}Windows 로그온 비밀번호를 변경할까요?\n로컬 계정에서만 동작합니다.`,
+      body: `${username ? `"${username}" ` : ''}Windows 로그온 비밀번호를 변경할까요?`,
       confirmLabel: '변경',
       cancelLabel: '취소',
     });
@@ -307,11 +307,11 @@ export default function WindowsSystemPage() {
 
         <Section
           title="비밀번호 설정"
-          description={
-            username
-              ? `현재 Windows 사용자 "${username}" 의 로컬 로그온 비밀번호를 변경합니다. Microsoft 계정은 Windows 설정에서 변경하세요.`
-              : '현재 Windows 로컬 계정의 로그온 비밀번호를 변경합니다.'
-          }
+            description={
+              username
+                ? `현재 Windows 사용자 "${username}" 의 로그온 비밀번호를 변경합니다. (이 PC 로컬 계정 · 현재 비밀번호 확인 후 본인이 변경)`
+                : '현재 Windows 로컬 계정의 로그온 비밀번호를 변경합니다.'
+            }
         >
           <div className="grid max-w-md gap-4">
             <Field label="현재 비밀번호">
