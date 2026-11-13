@@ -88,15 +88,70 @@ function applyWindowChrome(settings) {
   floatWin.setOpacity(settings.opacity);
 }
 
+/** 플로팅 창 최대 너비. */
+const FLOATING_MAX_WIDTH = 1024;
+/** 한 페이지 아이콘 수 (초과 시 점·화살표 페이지 UI). floating.html 과 동일 */
+const FLOATING_PAGE_SIZE = 10;
+
+/**
+ * 아이콘 수 기준 예상 너비 (실측 전·창 생성 직후용).
+ * 페이지당 최대 FLOATING_PAGE_SIZE 개만 한 줄에 둡니다.
+ * @param {number} count
+ */
+function estimateFloatingWidth(count) {
+  const total = Math.max(1, Number(count) || 1);
+  const n = Math.min(total, FLOATING_PAGE_SIZE);
+  const multi = total > FLOATING_PAGE_SIZE;
+  // body 패딩 + 바 패딩 + 핸들 + (페이지 화살표) + 아이템 + 구분선 + 추가 + 여유
+  const arrows = multi ? 8 + 22 + 8 + 22 : 0;
+  return 28 + 24 + 14 + 10 + arrows + n * 74 - 10 + 10 + 5 + 10 + 64 + 8;
+}
+
+/**
+ * 실제 DOM 크기에 맞춰 창을 키우고, 최대 1024px(또는 작업 영역)로 제한합니다.
+ * @param {number} [count]
+ */
 function resizeToContent(count) {
   if (!floatWin || floatWin.isDestroyed()) return;
-  const n = Math.max(1, Number(count) || 1);
-  // 좌우·하단 여백: CSS 그림자가 창 밖으로 잘리지 않게
-  // 핸들·아이템·구분선·추가(드롭 안내)·여백
-  const width = Math.min(960, 48 + 14 + n * 74 + 18 + 74 + 24);
-  const height = 124;
   const bounds = floatWin.getBounds();
-  floatWin.setBounds({ ...bounds, width, height });
+  const display = screen.getDisplayMatching(bounds);
+  const maxW = Math.min(FLOATING_MAX_WIDTH, Math.max(320, display.workArea.width - 24));
+  const maxH = Math.max(120, display.workArea.height - 24);
+  const fallbackW = Math.min(estimateFloatingWidth(count ?? listLauncherItems().length), maxW);
+  // 가로 스크롤바·하단 패딩 포함 여유 높이
+  const fallbackH = 148;
+
+  const apply = (width, height) => {
+    if (!floatWin || floatWin.isDestroyed()) return;
+    floatWin.setBounds({
+      ...floatWin.getBounds(),
+      width: Math.min(Math.max(Math.ceil(width), 200), maxW),
+      height: Math.min(Math.max(Math.ceil(height), 100), maxH),
+    });
+  };
+
+  apply(fallbackW, fallbackH);
+
+  // 렌더러가 그린 뒤 실측으로 한 번 더 맞춤
+  void floatWin.webContents
+    .executeJavaScript(
+      `(() => {
+        const bar = document.getElementById('bar');
+        if (!bar) return null;
+        const body = document.body;
+        const cs = window.getComputedStyle(body);
+        const padX = (parseFloat(cs.paddingLeft) || 0) + (parseFloat(cs.paddingRight) || 0);
+        const padY = (parseFloat(cs.paddingTop) || 0) + (parseFloat(cs.paddingBottom) || 0);
+        const barW = Math.max(bar.scrollWidth, bar.getBoundingClientRect().width);
+        const barH = Math.max(bar.scrollHeight, bar.getBoundingClientRect().height);
+        return { width: Math.ceil(barW + padX), height: Math.ceil(barH + padY) };
+      })()`,
+    )
+    .then((size) => {
+      if (!size?.width || !floatWin || floatWin.isDestroyed()) return;
+      apply(size.width, size.height || fallbackH);
+    })
+    .catch(() => undefined);
 }
 
 function showContextMenu() {
@@ -174,8 +229,8 @@ function placeDefault() {
   const work = display.workArea;
   const bounds = floatWin.getBounds();
   const x = Math.round(work.x + (work.width - bounds.width) / 2);
-  // 작업 영역 하단보다 6px 아래 (이전에 4px 위였던 위치에서 10px 더 내림)
-  const y = Math.round(work.y + work.height - bounds.height + 6);
+  // 높이 증가에 맞춰 하단 기준을 10px 위로 (작업 영역 하단에서 4px 위)
+  const y = Math.round(work.y + work.height - bounds.height - 4);
   floatWin.setPosition(x, y);
 }
 
@@ -270,8 +325,10 @@ export function showFloatingLauncher() {
   bindIpcOnce();
   const settings = readFloatingSettings();
   const count = listLauncherItems().length || 1;
-  const width = Math.min(960, 48 + 14 + count * 74 + 18 + 74 + 24);
-  const height = 124;
+  const display = screen.getPrimaryDisplay();
+  const maxW = Math.min(FLOATING_MAX_WIDTH, Math.max(320, display.workArea.width - 24));
+  const width = Math.min(estimateFloatingWidth(count), maxW);
+  const height = 148;
 
   if (floatWin && !floatWin.isDestroyed()) {
     pushState();
