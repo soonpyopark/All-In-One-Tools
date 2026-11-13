@@ -15,6 +15,8 @@ const STORE_FILE = 'floating-launcher.json';
  *   sharpenOnHover: boolean,
  *   alwaysOnTop: boolean,
  *   collapsed: boolean,
+ *   hideHelp: boolean,
+ *   columns: 5 | 7 | 10,
  * }} FloatingLauncherSettings
  */
 
@@ -27,6 +29,8 @@ function defaults() {
     sharpenOnHover: true,
     alwaysOnTop: true,
     collapsed: false,
+    hideHelp: false,
+    columns: 5,
   };
 }
 
@@ -48,6 +52,8 @@ function normalize(raw) {
     sharpenOnHover: src.sharpenOnHover !== false,
     alwaysOnTop: src.alwaysOnTop !== false,
     collapsed: src.collapsed === true,
+    hideHelp: src.hideHelp === true,
+    columns: [5, 7, 10].includes(Number(src.columns)) ? /** @type {5|7|10} */ (Number(src.columns)) : 5,
   };
 }
 

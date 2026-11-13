@@ -95,22 +95,35 @@ function applyWindowChrome(settings) {
 /** 플로팅 창 최대 너비. */
 const FLOATING_MAX_WIDTH = 1024;
 /** 한 페이지 아이콘 수 (초과 시 점·화살표 페이지 UI). floating.html 과 동일 */
-const FLOATING_PAGE_SIZE = 10;
+/** 빈 바로가기 안내 칸 수 */
+const EMPTY_SLOTS = 5;
+
+/**
+ * 한 줄에 보이는 아이콘 열 수 (5·7·10).
+ * @param {ReturnType<typeof readFloatingSettings>} [settings]
+ */
+function floatingPageSize(settings = readFloatingSettings()) {
+  const n = Number(settings.columns);
+  return n === 7 || n === 10 ? n : 5;
+}
 
 /**
  * 아이콘 수 기준 예상 너비 (실측 전·창 생성 직후용).
- * 페이지당 최대 FLOATING_PAGE_SIZE 개만 한 줄에 둡니다.
+ * 페이지당 최대 columns 개만 한 줄에 둡니다.
  * @param {number} count
  */
 function estimateFloatingWidth(count) {
   const settings = readFloatingSettings();
   if (settings.collapsed) return 64;
-  const total = Math.max(1, Number(count) || 1);
-  const n = Math.min(total, FLOATING_PAGE_SIZE);
-  const multi = total > FLOATING_PAGE_SIZE;
-  // body 패딩 + 바 패딩 + 핸들 + (페이지 화살표) + 아이템 + 구분선 + 추가 + 여유
+  const pageSize = floatingPageSize(settings);
+  const raw = Math.max(0, Number(count) || 0);
+  // 항목이 적으면 빈 칸(+) 기준으로 너비를 잡음
+  const n = Math.min(raw < EMPTY_SLOTS ? EMPTY_SLOTS : Math.max(raw, 1), pageSize);
+  const multi = raw > pageSize;
+  // body 패딩 + 바 패딩 + 핸들 + (페이지 화살표) + 아이템 + (구분선·도움?) + 여유
   const arrows = multi ? 8 + 22 + 8 + 22 : 0;
-  return 28 + 24 + 14 + 10 + arrows + n * 74 - 10 + 10 + 5 + 10 + 64 + 8;
+  const help = settings.hideHelp ? 0 : 10 + 5 + 10 + 48;
+  return 28 + 24 + 14 + 10 + arrows + n * 74 - 10 + help + 8;
 }
 
 /**
@@ -127,6 +140,10 @@ export async function setFloatingCollapsed(collapsed) {
     },
     collapsed ? 150 : 80,
   );
+  // 트레이「접기/펴기」라벨 동기화 (순환 import 방지: 지연 로드)
+  void import('../trayService.js').then((mod) => {
+    mod.refreshTrayMenu?.();
+  });
   return { ok: true, collapsed: Boolean(collapsed) };
 }
 
@@ -311,6 +328,20 @@ function showContextMenu() {
       })),
     },
     {
+      label: '아이콘 열',
+      submenu: [5, 7, 10].map((value) => ({
+        label: `${value}열`,
+        type: 'radio',
+        checked: floatingPageSize(settings) === value,
+        click: () => {
+          void updateFloatingSettings({ columns: value }).then(() => {
+            pushState();
+            resizeToContent(listLauncherItems().length);
+          });
+        },
+      })),
+    },
+    {
       label: '마우스 올리면 선명하게',
       type: 'checkbox',
       checked: settings.sharpenOnHover,
@@ -329,6 +360,17 @@ function showContextMenu() {
         void updateFloatingSettings({ alwaysOnTop: menuItem.checked }).then((next) => {
           applyWindowChrome(next);
           pushState();
+        });
+      },
+    },
+    {
+      label: '도움말 표시',
+      type: 'checkbox',
+      checked: !settings.hideHelp,
+      click: (menuItem) => {
+        void updateFloatingSettings({ hideHelp: !menuItem.checked }).then(() => {
+          pushState();
+          resizeToContent(listLauncherItems().length);
         });
       },
     },
@@ -470,6 +512,14 @@ function bindIpcOnce() {
     void setFloatingCollapsed(Boolean(collapsed));
   });
 
+  ipcMain.on('floating-launcher:set-hide-help', (event, hide) => {
+    if (!isFloatingLauncherSender(event)) return;
+    void updateFloatingSettings({ hideHelp: Boolean(hide) }).then(() => {
+      pushState();
+      resizeToContent(listLauncherItems().length);
+    });
+  });
+
   ipcMain.on('floating-launcher:resize', (event) => {
     if (!isFloatingLauncherSender(event)) return;
     resizeToContent(listLauncherItems().length);
@@ -479,7 +529,7 @@ function bindIpcOnce() {
 export function showFloatingLauncher() {
   bindIpcOnce();
   const settings = readFloatingSettings();
-  const count = listLauncherItems().length || 1;
+  const count = listLauncherItems().length;
   const display = screen.getPrimaryDisplay();
   const maxW = Math.min(FLOATING_MAX_WIDTH, Math.max(320, display.workArea.width - 24));
   const width = Math.min(estimateFloatingWidth(count), maxW);

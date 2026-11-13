@@ -25,7 +25,7 @@ function defaultSettings() {
     version: 1,
     accentColor: DEFAULT_ACCENT_COLOR,
     startupUpdateCheck: true,
-    closeToTray: false,
+    closeToTray: true,
     floatingLauncherOnStart: true,
     ffmpegDir: '',
     exportDir: '',
@@ -85,7 +85,8 @@ function normalizeSettings(raw) {
     version: 1,
     accentColor: normalizeAccentColor(src.accentColor, base.accentColor),
     startupUpdateCheck: src.startupUpdateCheck !== false,
-    closeToTray: src.closeToTray === true,
+    // 기본값 켜짐. 사용자가 끄기 전에는 닫을 때 트레이로 보냅니다.
+    closeToTray: src.closeToTray !== false,
     // 기본값 켜짐. 사용자가 끄기 전에는 시작 시 플로팅을 엽니다.
     floatingLauncherOnStart: src.floatingLauncherOnStart !== false,
     ffmpegDir: typeof src.ffmpegDir === 'string' ? src.ffmpegDir.trim() : base.ffmpegDir,

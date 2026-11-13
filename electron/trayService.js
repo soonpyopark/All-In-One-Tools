@@ -3,6 +3,7 @@
  */
 import { Menu, Tray, app, nativeImage } from 'electron';
 import { APP_NAME } from '../shared/constants.js';
+import { readFloatingSettings } from './launcher/floatingStore.js';
 
 /** @type {Tray | null} */
 let tray = null;
@@ -79,15 +80,39 @@ function trayIcon() {
   return nativeImage.createEmpty();
 }
 
-function ensureTray() {
-  if (tray || !closeToTray) return;
-  tray = new Tray(trayIcon());
-  tray.setToolTip(APP_NAME);
+/** 접힘 상태에 맞춰 트레이 메뉴 라벨을 갱신합니다. */
+export function refreshTrayMenu() {
+  if (!tray || !closeToTray) return;
+  const collapsed = readFloatingSettings().collapsed === true;
   tray.setContextMenu(
     Menu.buildFromTemplate([
       {
-        label: '열기',
+        label: '메인 창 열기',
         click: () => showMainWindow(),
+      },
+      {
+        label: '메인 창 최소화',
+        click: () => minimizeMainWindow(),
+      },
+      {
+        label: '플로팅 런처 실행',
+        click: () => {
+          // floatingWindow → trayService 순환 import 를 피하기 위해 지연 로드
+          void import('./launcher/floatingWindow.js').then((mod) => {
+            mod.showFloatingLauncher();
+          });
+        },
+      },
+      {
+        label: collapsed ? '플로팅 런처 펴기' : '플로팅 런처 접기',
+        click: () => {
+          void import('./launcher/floatingWindow.js').then(async (mod) => {
+            const nextCollapsed = !readFloatingSettings().collapsed;
+            // 펴기 시 창이 없으면 먼저 실행
+            if (!nextCollapsed) mod.showFloatingLauncher();
+            await mod.setFloatingCollapsed(nextCollapsed);
+          });
+        },
       },
       { type: 'separator' },
       {
@@ -100,6 +125,13 @@ function ensureTray() {
       },
     ]),
   );
+}
+
+function ensureTray() {
+  if (tray || !closeToTray) return;
+  tray = new Tray(trayIcon());
+  tray.setToolTip(APP_NAME);
+  refreshTrayMenu();
   tray.on('click', () => showMainWindow());
   tray.on('double-click', () => showMainWindow());
 }
@@ -120,6 +152,15 @@ export function showMainWindow() {
   if (win.isMinimized()) win.restore();
   win.show();
   win.focus();
+  return true;
+}
+
+/** 트레이「메인 창 최소화」 */
+export function minimizeMainWindow() {
+  const win = getMainWindow?.() ?? null;
+  if (!win || win.isDestroyed()) return false;
+  if (!win.isVisible() && !win.isMinimized()) return false;
+  win.minimize();
   return true;
 }
 

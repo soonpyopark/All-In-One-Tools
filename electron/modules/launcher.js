@@ -112,13 +112,11 @@ export function register() {
     return removeItemFromFloating(id);
   });
 
-  /** 탐색기·바탕화면·브라우저에서 끌어다 놓은 경로·URL을 종류별로 바로 추가합니다. */
-  defineApi('launcher.addFromPaths', async (body) => {
-    const paths = Array.isArray(body?.paths)
-      ? body.paths.map((entry) => String(entry ?? '').trim()).filter(Boolean)
-      : [];
-    if (paths.length === 0) throw new ApiError('추가할 항목이 없습니다.');
-
+  /**
+   * 경로·URL 목록을 바로가기로 추가합니다.
+   * @param {string[]} paths
+   */
+  async function addFromPathList(paths) {
     /** @type {unknown[]} */
     const drafts = [];
     /** @type {string[]} */
@@ -169,16 +167,46 @@ export function register() {
       );
     }
 
+    const result = await addLauncherItems(drafts);
+    notifyLauncherClients();
+    return {
+      // 플로팅이 응답 items 로 다시 그릴 때 색이 기본값으로 덮이지 않도록 from/to 포함
+      items: decorateLauncherItemsForUi(result.items),
+      added: result.added,
+      skipped: result.skipped + failures.length,
+      failures: failures.slice(0, 8),
+    };
+  }
+
+  /** 탐색기·바탕화면·브라우저에서 끌어다 놓은 경로·URL을 종류별로 바로 추가합니다. */
+  defineApi('launcher.addFromPaths', async (body) => {
+    const paths = Array.isArray(body?.paths)
+      ? body.paths.map((entry) => String(entry ?? '').trim()).filter(Boolean)
+      : [];
+    if (paths.length === 0) throw new ApiError('추가할 항목이 없습니다.');
     try {
-      const result = await addLauncherItems(drafts);
-      notifyLauncherClients();
+      return await addFromPathList(paths);
+    } catch (err) {
+      throw new ApiError(err instanceof Error ? err.message : String(err));
+    }
+  });
+
+  /** 플로팅 빈 칸(+) 클릭: 파일 선택 후 바로가기 추가 */
+  defineApi('launcher.floating.pickAdd', async () => {
+    const parent = BrowserWindow.getFocusedWindow() ?? appMainWindow();
+    const result = await dialog.showOpenDialog(parent ?? undefined, {
+      title: '바로가기 추가',
+      properties: ['openFile', 'multiSelections'],
+    });
+    if (result.canceled || !result.filePaths?.length) {
       return {
-        // 플로팅이 응답 items 로 다시 그릴 때 색이 기본값으로 덮이지 않도록 from/to 포함
-        items: decorateLauncherItemsForUi(result.items),
-        added: result.added,
-        skipped: result.skipped + failures.length,
-        failures: failures.slice(0, 8),
+        cancelled: true,
+        items: decorateLauncherItemsForUi(listLauncherItems()),
       };
+    }
+    try {
+      const out = await addFromPathList(result.filePaths);
+      return { cancelled: false, ...out };
     } catch (err) {
       throw new ApiError(err instanceof Error ? err.message : String(err));
     }

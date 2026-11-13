@@ -29,6 +29,8 @@ contextBridge.exposeInMainWorld('floatingLauncher', {
   setHover: (hovering) => ipcRenderer.send('floating-launcher:hover', Boolean(hovering)),
   /** 접기/펼치기 (작은 핸들만 남기기) */
   setCollapsed: (collapsed) => ipcRenderer.send('floating-launcher:set-collapsed', Boolean(collapsed)),
+  /** 도움(?) 버튼 숨김 */
+  setHideHelp: (hide) => ipcRenderer.send('floating-launcher:set-hide-help', Boolean(hide)),
   /** DOM 변경 후 창 크기 재측정 */
   requestResize: () => ipcRenderer.send('floating-launcher:resize'),
   /** 탐색기에서 끌어다 놓은 File 의 실제 경로 */
