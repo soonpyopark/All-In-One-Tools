@@ -22,7 +22,9 @@ contextBridge.exposeInMainWorld('floatingLauncher', {
     return () => ipcRenderer.removeListener('floating-launcher:settings', listener);
   },
   ready: () => ipcRenderer.send('floating-launcher:ready'),
-  contextMenu: () => ipcRenderer.send('floating-launcher:context-menu'),
+  /** @param {string} [itemId] 아이콘 우클릭 시 해당 바로가기 id (편집·삭제 메뉴용) */
+  contextMenu: (itemId) =>
+    ipcRenderer.send('floating-launcher:context-menu', itemId ? String(itemId) : ''),
   moveBy: (dx, dy) => ipcRenderer.send('floating-launcher:move-by', dx, dy),
   /** 드래그 종료 시 최종 위치를 디스크에 바로 저장합니다. */
   moveEnd: () => ipcRenderer.send('floating-launcher:move-end'),

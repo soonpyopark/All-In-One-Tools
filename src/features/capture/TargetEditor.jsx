@@ -55,17 +55,42 @@ export default function TargetEditor({ value, onChange, targets, onReloadTargets
     patch({ region: { ...base, [key]: Number.isFinite(n) ? n : 0 } });
   };
 
+  // 빈 값(주 모니터) 옵션은 쓰지 않음 — 실제 모니터 id 만 고르고, 저장한 선택을 유지
+  const displayIds = new Set(displays.map((display) => String(display.id)));
+  const primaryDisplay = displays.find((display) => /주 모니터/.test(display.label)) ?? displays[0];
+  const orphanId =
+    value.displayId != null && value.displayId !== '' && !displayIds.has(String(value.displayId))
+      ? String(value.displayId)
+      : null;
+  const selectValue =
+    value.displayId != null && value.displayId !== ''
+      ? String(value.displayId)
+      : primaryDisplay
+        ? String(primaryDisplay.id)
+        : '';
+
   const displaySelect = (
     <>
       <select
         className={`${inputSmClass} max-w-[16rem]`}
-        value={value.displayId ?? ''}
-        onChange={(event) => patch({ displayId: event.target.value === '' ? null : Number(event.target.value) })}
+        value={selectValue}
+        onChange={(event) => {
+          const nextId = Number(event.target.value);
+          const displayId = Number.isFinite(nextId) ? nextId : null;
+          patch({ displayId });
+          // 고른 모니터를 기억해 두어, 저장·다음 캡처에서도 같은 화면을 유지
+          if (displayId != null) {
+            void api('capture.rememberDisplay', { displayId }).catch(() => undefined);
+          }
+        }}
         aria-label="모니터 선택"
+        disabled={displays.length === 0}
       >
-        <option value="">주 모니터</option>
+        {orphanId ? (
+          <option value={orphanId}>저장된 모니터 (목록에 없음 — 다시 선택)</option>
+        ) : null}
         {displays.map((display) => (
-          <option key={display.id} value={display.id}>
+          <option key={display.id} value={String(display.id)}>
             {display.label}
           </option>
         ))}

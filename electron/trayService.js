@@ -94,6 +94,7 @@ export function refreshTrayMenu() {
         label: '메인 창 최소화',
         click: () => minimizeMainWindow(),
       },
+      { type: 'separator' },
       {
         label: '플로팅 런처 실행',
         click: () => {

@@ -457,7 +457,10 @@ function AppShellInner() {
               className={`${floatingButtonClass} text-orange-500 hover:bg-orange-50 hover:text-orange-600`}
               title="런처"
               aria-label="런처"
-              onClick={() => goTo('launcher')}
+              onClick={() => {
+                goTo('launcher');
+                void api('launcher.floating.show', { expand: true }).catch(() => undefined);
+              }}
             >
               <svg className={floatingIconClass} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
                 <path d="M4.5 16.5c-1.5 1.26-2 5-2 5s3.74-.5 5-2c.71-.84.7-2.13-.09-2.91a2.18 2.18 0 0 0-2.91-.09z" />

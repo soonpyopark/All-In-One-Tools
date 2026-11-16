@@ -7,6 +7,7 @@ import { BrowserWindow, Menu, dialog, ipcMain, screen, shell } from 'electron';
 import { APP_NAME } from '../../shared/constants.js';
 import { decorateLauncherItemsForUi } from '../../shared/launcherColors.js';
 import { showMainWindow } from '../trayService.js';
+import { clearLauncherIconCache, presentLauncherItems } from './fileIcon.js';
 import { listLauncherItems, removeLauncherItem } from './store.js';
 import { readFloatingSettings, updateFloatingSettings } from './floatingStore.js';
 
@@ -48,9 +49,14 @@ function itemPayload() {
 function pushState() {
   if (!floatWin || floatWin.isDestroyed()) return;
   const settings = readFloatingSettings();
+  // 먼저 이모지 목록을 보내고, 파일 아이콘이 준비되면 다시 갱신
   floatWin.webContents.send('floating-launcher:items', itemPayload());
   floatWin.webContents.send('floating-launcher:settings', settings);
   applyWindowChrome(settings);
+  void presentLauncherItems().then((items) => {
+    if (!floatWin || floatWin.isDestroyed()) return;
+    floatWin.webContents.send('floating-launcher:items', { items });
+  });
 }
 
 /**
@@ -58,15 +64,28 @@ function pushState() {
  * @param {import('./store.js').LauncherItem[] | undefined} [items]
  */
 export function notifyMainLauncherItems(items) {
-  const list = Array.isArray(items) ? items : listLauncherItems();
+  const raw = Array.isArray(items) ? items : listLauncherItems();
+  // 즉시 원본 전달 후 아이콘 장식본으로 한 번 더
   for (const win of BrowserWindow.getAllWindows()) {
     if (win.isDestroyed() || win === floatWin) continue;
     try {
-      win.webContents.send('launcher:items-changed', { items: list });
+      win.webContents.send('launcher:items-changed', {
+        items: decorateLauncherItemsForUi(raw),
+      });
     } catch {
       /* ignore */
     }
   }
+  void presentLauncherItems(raw).then((presented) => {
+    for (const win of BrowserWindow.getAllWindows()) {
+      if (win.isDestroyed() || win === floatWin) continue;
+      try {
+        win.webContents.send('launcher:items-changed', { items: presented });
+      } catch {
+        /* ignore */
+      }
+    }
+  });
 }
 
 /**
@@ -302,10 +321,19 @@ function resizeToContent(count, options = {}) {
     .catch(() => undefined);
 }
 
-function showContextMenu() {
+/**
+ * @param {string} [itemId] 아이콘 우클릭 시에만 전달 — 편집·삭제 항목 표시
+ */
+function showContextMenu(itemId) {
   if (!floatWin || floatWin.isDestroyed()) return;
   const settings = readFloatingSettings();
-  const menu = Menu.buildFromTemplate([
+  const targetId = String(itemId ?? '').trim();
+  const targetItem = targetId
+    ? listLauncherItems().find((entry) => entry.id === targetId)
+    : null;
+
+  /** @type {import('electron').MenuItemConstructorOptions[]} */
+  const template = [
     {
       label: settings.collapsed ? '펼치기' : '접기',
       click: () => {
@@ -387,6 +415,28 @@ function showContextMenu() {
         resizeToContent(listLauncherItems().length);
       },
     },
+  ];
+
+  // 아이콘 우클릭일 때만 편집·삭제 (빈 영역·+칸에서는 숨김)
+  if (targetItem) {
+    template.push(
+      { type: 'separator' },
+      {
+        label: '편집',
+        click: () => {
+          editItemFromFloating(targetItem.id);
+        },
+      },
+      {
+        label: '삭제',
+        click: () => {
+          void removeItemFromFloating(targetItem.id);
+        },
+      },
+    );
+  }
+
+  template.push(
     { type: 'separator' },
     {
       label: '메인 창 열기',
@@ -396,8 +446,9 @@ function showContextMenu() {
       label: '플로팅 런처 종료',
       click: () => hideFloatingLauncher(),
     },
-  ]);
-  menu.popup({ window: floatWin });
+  );
+
+  Menu.buildFromTemplate(template).popup({ window: floatWin });
 }
 
 function placeDefault() {
@@ -475,9 +526,9 @@ function bindIpcOnce() {
     resizeToContent(listLauncherItems().length);
   });
 
-  ipcMain.on('floating-launcher:context-menu', (event) => {
+  ipcMain.on('floating-launcher:context-menu', (event, itemId) => {
     if (!isFloatingLauncherSender(event)) return;
-    showContextMenu();
+    showContextMenu(typeof itemId === 'string' ? itemId : '');
   });
 
   ipcMain.on('floating-launcher:move-by', (event, dx, dy) => {
@@ -690,9 +741,10 @@ export async function removeItemFromFloating(id) {
     return { cancelled: true, items: listLauncherItems() };
   }
 
+  clearLauncherIconCache(itemId);
   const items = await removeLauncherItem(itemId);
   broadcastLauncherItemsChanged(items);
-  return { cancelled: false, items: decorateLauncherItemsForUi(items) };
+  return { cancelled: false, items: await presentLauncherItems(items) };
 }
 
 export function refreshFloatingLauncher() {

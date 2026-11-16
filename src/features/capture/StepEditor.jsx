@@ -23,12 +23,20 @@ const ADD_COLORS = {
   capture: 'border-sky-200 text-sky-700 hover:bg-sky-50',
 };
 
-/** 새 단계의 기본값 */
-export function newStep(type) {
+/**
+ * 새 단계의 기본값
+ * @param {'delay' | 'key' | 'mouse' | 'capture'} type
+ * @param {{ displayId?: number | null }} [defaults]
+ */
+export function newStep(type, defaults = {}) {
   if (type === 'delay') return { type, ms: 500 };
   if (type === 'key') return { type, action: 'press', key: 'PageDown' };
   if (type === 'mouse') return { type, action: 'click', button: 'left', x: 0, y: 0, amount: 3 };
-  return { type: 'capture', target: { mode: 'screen', displayId: null, windowTitle: '', region: null } };
+  const displayId =
+    defaults.displayId != null && Number.isFinite(Number(defaults.displayId))
+      ? Number(defaults.displayId)
+      : null;
+  return { type: 'capture', target: { mode: 'screen', displayId, windowTitle: '', region: null } };
 }
 
 /** 키 이름 입력: 직접 입력하거나 "눌러서 입력" 으로 실제 키를 눌러 지정합니다. */
@@ -119,7 +127,15 @@ function CoordInput({ x, y, onChange, onError }) {
  *   onError: (message: string) => void,
  * }} props
  */
-export default function StepEditor({ steps, onChange, activeIndex = -1, targets, onReloadTargets, onError }) {
+export default function StepEditor({
+  steps,
+  onChange,
+  activeIndex = -1,
+  targets,
+  onReloadTargets,
+  onError,
+  defaultDisplayId = null,
+}) {
   const update = (index, patch) => onChange(steps.map((step, i) => (i === index ? { ...step, ...patch } : step)));
   const remove = (index) => onChange(steps.filter((_, i) => i !== index));
   const move = (index, direction) => {
@@ -129,7 +145,7 @@ export default function StepEditor({ steps, onChange, activeIndex = -1, targets,
     [copy[index], copy[next]] = [copy[next], copy[index]];
     onChange(copy);
   };
-  const add = (type) => onChange([...steps, newStep(type)]);
+  const add = (type) => onChange([...steps, newStep(type, { displayId: defaultDisplayId })]);
 
   return (
     <div className="space-y-3">

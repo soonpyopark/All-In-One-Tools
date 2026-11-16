@@ -255,6 +255,8 @@ export default function CapturePage({ featureId } = {}) {
   const [snapResult, setSnapResult] = useState(/** @type {{ path: string, width: number, height: number } | null} */ (null));
   const [snapDirLoaded, setSnapDirLoaded] = useState(false);
   const [renaming, setRenaming] = useState(false);
+  /** 마지막에 고른 모니터 — 새 캡처 단계 기본값 */
+  const [lastDisplayId, setLastDisplayId] = useState(/** @type {number | null} */ (null));
 
   const running = status.run?.state === 'running';
   useReportJobRunning(featureId, running, '매크로 캡처 중');
@@ -295,6 +297,17 @@ export default function CapturePage({ featureId } = {}) {
       .then((res) => alive && setInfo(res))
       .catch(() => undefined);
     reloadTargets();
+    // 마지막에 고른 모니터를 빠른 캡처·새 단계 기본값으로
+    api('capture.lastDisplay')
+      .then((res) => {
+        if (!alive || res?.displayId == null) return;
+        const id = Number(res.displayId);
+        setLastDisplayId(id);
+        setSnapTarget((current) =>
+          current.displayId == null ? { ...current, displayId: id } : current,
+        );
+      })
+      .catch(() => undefined);
     api('capture.presets.list')
       .then((res) => {
         if (!alive) return;
@@ -434,6 +447,12 @@ export default function CapturePage({ featureId } = {}) {
       const res = await api('capture.presets.save', { preset: draft });
       setPresets(res.presets);
       loadDraft(res.preset);
+      const screenStep = [...(res.preset?.steps ?? [])]
+        .reverse()
+        .find((step) => step?.type === 'capture' && step?.target?.mode === 'screen');
+      if (screenStep?.target?.displayId != null) {
+        setLastDisplayId(Number(screenStep.target.displayId));
+      }
       if (res.rearmError) showError(`저장했지만 단축키를 다시 등록하지 못했습니다.\n${res.rearmError}`);
       return res.preset;
     } catch (err) {
@@ -502,6 +521,11 @@ export default function CapturePage({ featureId } = {}) {
         format: snapFormat,
         delayMs: Math.round(snapDelay * 1000),
       });
+      if (res?.displayId != null) {
+        const id = Number(res.displayId);
+        setLastDisplayId(id);
+        setSnapTarget((current) => ({ ...current, displayId: id }));
+      }
       setSnapResult(res);
     } catch (err) {
       showError(toMessage(err, '캡처하지 못했습니다.'));
@@ -556,7 +580,17 @@ export default function CapturePage({ featureId } = {}) {
   const quickTab = (
     <Section title="빠른 캡처" description="지금 한 장을 캡처해 저장합니다. 캡처하는 동안 이 창은 잠시 최소화됩니다.">
       <div className="space-y-5">
-        <TargetEditor idPrefix="snap" value={snapTarget} onChange={setSnapTarget} targets={targets} onReloadTargets={reloadTargets} onError={showError} />
+        <TargetEditor
+          idPrefix="snap"
+          value={snapTarget}
+          onChange={(next) => {
+            setSnapTarget(next);
+            if (next?.displayId != null) setLastDisplayId(Number(next.displayId));
+          }}
+          targets={targets}
+          onReloadTargets={reloadTargets}
+          onError={showError}
+        />
 
         <div className="grid gap-4 sm:grid-cols-[minmax(0,1fr)_6rem_8rem]">
           {dirField(snapDir, setSnapDir, `비우면 기본 폴더: ${defaultDir}`)}
@@ -734,11 +768,21 @@ export default function CapturePage({ featureId } = {}) {
           <Section title="동작 순서" description="위에서 아래로 실행하고, 끝나면 처음부터 반복합니다. 저장 폴더의 이미지 수가 목표에 도달하면 끝납니다.">
             <StepEditor
               steps={draft.steps}
-              onChange={(steps) => patchDraft({ steps })}
+              onChange={(steps) => {
+                patchDraft({ steps });
+                // 단계에서 고른 화면을 다음 추가 단계 기본값으로
+                const screenStep = [...steps]
+                  .reverse()
+                  .find((step) => step?.type === 'capture' && step?.target?.mode === 'screen');
+                if (screenStep?.target?.displayId != null) {
+                  setLastDisplayId(Number(screenStep.target.displayId));
+                }
+              }}
               activeIndex={runningHere ? run.stepIndex : -1}
               targets={targets}
               onReloadTargets={reloadTargets}
               onError={showError}
+              defaultDisplayId={lastDisplayId}
             />
           </Section>
 

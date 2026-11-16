@@ -43,10 +43,17 @@ function resolveWix() {
   );
 }
 
-/** x.y.z → x.y.z.<minute counter>; the 4th part must change per build so MSI treats it as an upgrade. */
+/**
+ * MSI ProductVersion (최대 4단).
+ * - x.y.z.w 이면 그대로 사용 (태그 v1.0.1.5 등과 맞춤)
+ * - x.y.z 만 있으면 4번째에 분 단위 카운터를 붙여 업그레이드 인식
+ */
 function toMsiVersion(version) {
   const parts = String(version).split('.').map((part) => Number.parseInt(part, 10) || 0);
   while (parts.length < 3) parts.push(0);
+  if (parts.length >= 4) {
+    return `${parts[0]}.${parts[1]}.${parts[2]}.${Math.min(65535, Math.max(0, parts[3]))}`;
+  }
   const revision = Math.floor(Date.now() / 60_000) % 65535;
   return `${parts[0]}.${parts[1]}.${parts[2]}.${revision || 1}`;
 }

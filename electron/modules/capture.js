@@ -6,6 +6,7 @@ import { getRunStatus, getCursorPosition, isRunning, startMacro, stopMacro } fro
 import { statePath } from '../context.js';
 import { readJsonSync, writeJsonSync } from '../jsonStore.js';
 import { identifyDisplays } from '../capture/identifyDisplays.js';
+import { rememberCaptureDisplay, resolveCaptureDisplayId } from '../capture/capturePrefs.js';
 import { getPreset, listPresets, movePreset, normalizeTarget, removePreset, savePreset } from '../capture/presets.js';
 import { pickRegion } from '../capture/regionPicker.js';
 import { captureTarget, listTargets, saveImage } from '../capture/screenCapture.js';
@@ -112,6 +113,16 @@ export function register() {
 
   defineApi('capture.info', () => ({ defaultOutputDir: defaultOutputDir() }));
 
+  /** 마지막으로 고른(또는 주) 모니터 id */
+  defineApi('capture.lastDisplay', () => ({ displayId: resolveCaptureDisplayId(null) }));
+
+  /** 사용자가 모니터를 고르면 바로 기억 */
+  defineApi('capture.rememberDisplay', async (body) => {
+    const displayId = resolveCaptureDisplayId(body?.displayId);
+    await rememberCaptureDisplay(displayId);
+    return { displayId };
+  });
+
   /** 선택할 수 있는 화면 / 창 목록 */
   defineApi('capture.targets', async () => {
     try {
@@ -156,6 +167,10 @@ export function register() {
   defineApi('capture.snap', async (body) => {
     if (isRunning()) throw new ApiError('매크로 실행 중에는 캡처할 수 없습니다.');
     const target = normalizeTarget(body?.target);
+    if (target.mode === 'screen') {
+      target.displayId = resolveCaptureDisplayId(target.displayId);
+      await rememberCaptureDisplay(target.displayId);
+    }
     const format = body?.format === 'jpg' ? 'jpg' : 'png';
     const quality = Math.min(100, Math.max(10, Math.round(Number(body?.jpegQuality) || 90)));
     const delayMs = Math.min(30_000, Math.max(0, Math.round(Number(body?.delayMs) || 0)));
@@ -168,7 +183,7 @@ export function register() {
       const filePath = path.join(dir, `snap_${stamp()}.${format}`);
       saveImage(image, filePath, format, quality);
       const size = image.getSize();
-      return { path: filePath, width: size.width, height: size.height };
+      return { path: filePath, width: size.width, height: size.height, displayId: target.displayId };
     } catch (err) {
       throw toApiError(err);
     } finally {

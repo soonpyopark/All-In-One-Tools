@@ -262,6 +262,15 @@
         font-size: 24px;
         background: linear-gradient(145deg, #94a3b8, #334155);
         box-shadow: 0 2px 6px rgba(0, 0, 0, 0.2);
+        overflow: hidden;
+      }
+      .glyph.has-file-icon img {
+        width: 30px;
+        height: 30px;
+        object-fit: contain;
+        pointer-events: none;
+        -webkit-user-drag: none;
+        filter: drop-shadow(0 1px 1px rgba(0, 0, 0, 0.25));
       }
       .label {
         width: 100%;
@@ -272,34 +281,6 @@
         font-size: 11px;
         line-height: 1.2;
         color: var(--text);
-      }
-      .actions {
-        position: absolute;
-        top: 0;
-        right: -2px;
-        z-index: 2;
-        display: none;
-        gap: 2px;
-      }
-      .item:hover .actions {
-        display: flex;
-      }
-      .actions button {
-        width: 16px;
-        height: 16px;
-        border: 0;
-        border-radius: 4px;
-        font-size: 10px;
-        line-height: 1;
-        cursor: pointer;
-        background: rgba(255, 255, 255, 0.92);
-        color: #374151;
-        padding: 0;
-        box-shadow: 0 1px 2px rgba(0, 0, 0, 0.25);
-      }
-      .actions button.del {
-        color: #dc2626;
-        font-weight: 700;
       }
       .divider {
         width: 1px;
@@ -956,50 +937,26 @@
           btn.className = 'item';
           btn.draggable = busyId !== item.id;
           btn.disabled = busyId === item.id;
-          btn.title = `${item.title || '바로가기'}\n끌어서 순서 변경 · 클릭하여 실행`;
+          btn.title = `${item.title || '바로가기'}\n클릭 실행 · 끌어서 순서 변경 · 우클릭으로 편집/삭제`;
           btn.dataset.id = item.id;
-
-          const actions = document.createElement('div');
-          actions.className = 'actions';
-          const edit = document.createElement('button');
-          edit.type = 'button';
-          edit.draggable = false;
-          edit.title = '메인 런처에서 편집';
-          edit.textContent = '✎';
-          edit.addEventListener('click', (event) => {
-            event.stopPropagation();
-            void bridge.api('launcher.floating.edit', { id: item.id });
-          });
-          const del = document.createElement('button');
-          del.type = 'button';
-          del.className = 'del';
-          del.draggable = false;
-          del.title = '삭제';
-          del.textContent = '×';
-          del.addEventListener('click', async (event) => {
-            event.stopPropagation();
-            try {
-              const res = await bridge.api('launcher.floating.remove', { id: item.id });
-              if (res?.cancelled) return;
-              items = Array.isArray(res?.items) ? res.items : items.filter((entry) => entry.id !== item.id);
-              clampPage();
-              render();
-            } catch {
-              /* ignore */
-            }
-          });
-          actions.appendChild(edit);
-          actions.appendChild(del);
 
           const glyph = document.createElement('span');
           glyph.className = 'glyph';
-          glyph.textContent = item.icon || '💻';
           glyph.style.background = glyphBackground(item);
+          if (item.iconImage) {
+            glyph.classList.add('has-file-icon');
+            const img = document.createElement('img');
+            img.src = item.iconImage;
+            img.alt = '';
+            img.draggable = false;
+            glyph.appendChild(img);
+          } else {
+            glyph.textContent = item.icon || '💻';
+          }
           const label = document.createElement('span');
           label.className = 'label';
           label.textContent = item.title || '바로가기';
 
-          btn.appendChild(actions);
           btn.appendChild(glyph);
           btn.appendChild(label);
 
@@ -1070,7 +1027,7 @@
       function canDragWindow(event) {
         const el = event.target;
         if (!(el instanceof Element)) return false;
-        if (el.closest('.item, .add, .actions, #addHint, .page-nav, .dot, #helpPanel')) return false;
+        if (el.closest('.item, .add, #addHint, .page-nav, .dot, #helpPanel')) return false;
         return Boolean(el.closest('#bar'));
       }
 
@@ -1114,7 +1071,9 @@
       bar.addEventListener('mouseleave', () => applyHover(false));
       bar.addEventListener('contextmenu', (event) => {
         event.preventDefault();
-        bridge.contextMenu();
+        const target = event.target instanceof Element ? event.target.closest('.item:not(.slot)') : null;
+        const itemId = target instanceof HTMLElement ? target.dataset.id || '' : '';
+        bridge.contextMenu(itemId);
       });
 
       prevPageBtn.addEventListener('click', (event) => {

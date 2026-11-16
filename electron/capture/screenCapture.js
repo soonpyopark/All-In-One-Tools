@@ -1,6 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { desktopCapturer, screen } from 'electron';
+import { resolveCaptureDisplayId } from './capturePrefs.js';
 
 /**
  * 화면 / 창 / 영역 캡처 (Electron `desktopCapturer`).
@@ -46,7 +47,8 @@ export function displayGeometry(display) {
 /** @param {number | null | undefined} displayId */
 export function findDisplay(displayId) {
   const displays = screen.getAllDisplays();
-  return displays.find((d) => d.id === displayId) ?? screen.getPrimaryDisplay();
+  const resolvedId = resolveCaptureDisplayId(displayId);
+  return displays.find((d) => Number(d.id) === Number(resolvedId)) ?? screen.getPrimaryDisplay();
 }
 
 /** 화면/창 선택 목록 (썸네일 없이 이름만). */

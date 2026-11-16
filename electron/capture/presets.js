@@ -4,6 +4,7 @@ import { fileURLToPath } from 'node:url';
 import { randomUUID } from 'node:crypto';
 import { statePath } from '../context.js';
 import { readJsonSync, withFileLock, writeJsonSync } from '../jsonStore.js';
+import { rememberCaptureDisplay, resolveCaptureDisplayId } from './capturePrefs.js';
 
 /**
  * 캡처 매크로 프리셋 저장소 (`macros.json`).
@@ -210,16 +211,45 @@ function writePresets(presets) {
   writeJsonSync(statePath(MACROS_FILE), { version: 1, presets });
 }
 
+/**
+ * 화면 캡처 단계의 displayId 를 현재 모니터 기준으로 확정합니다 (null → 실제 id).
+ * @param {MacroPreset} preset
+ * @returns {MacroPreset}
+ */
+function freezeCaptureDisplays(preset) {
+  return {
+    ...preset,
+    steps: preset.steps.map((step) => {
+      if (step.type !== 'capture' || step.target.mode !== 'screen') return step;
+      return {
+        ...step,
+        target: {
+          ...step.target,
+          displayId: resolveCaptureDisplayId(step.target.displayId),
+        },
+      };
+    }),
+  };
+}
+
 /** 있으면 갱신하고, 없으면 끝에 추가합니다. @param {any} raw */
 export function savePreset(raw) {
-  return withFileLock(statePath(MACROS_FILE), () => {
-    const preset = normalizePreset(raw);
+  return withFileLock(statePath(MACROS_FILE), async () => {
+    const preset = freezeCaptureDisplays(normalizePreset(raw));
     const presets = listPresets();
     const index = presets.findIndex((item) => item.id === preset.id);
     if (index >= 0) presets[index] = preset;
     else if (presets.length >= MAX_PRESETS) throw new Error(`프리셋은 최대 ${MAX_PRESETS}개까지 저장할 수 있습니다.`);
     else presets.push(preset);
     writePresets(presets);
+
+    // 마지막 화면 캡처에 쓴 모니터를 기억 → 다음에도 같은 화면 유지
+    const lastScreen = [...preset.steps]
+      .reverse()
+      .find((step) => step.type === 'capture' && step.target.mode === 'screen');
+    if (lastScreen) {
+      await rememberCaptureDisplay(lastScreen.target.displayId);
+    }
     return preset;
   });
 }

@@ -25,6 +25,7 @@ function isExternalFileDrag(event) {
  *   icon: string,
  *   group: 'work' | 'personal' | 'general',
  *   color: string,
+ *   iconImage?: string,
  * }} LauncherItem
  */
 
@@ -713,7 +714,16 @@ export default function LauncherPage({ editItemId = null, onEditItemHandled } = 
                   style={{ background: launcherColorGradient(draft.color) }}
                   aria-hidden
                 >
-                  {draft.icon || TYPE_ICON[draft.type]}
+                  {draft.iconImage ? (
+                    <img
+                      src={draft.iconImage}
+                      alt=""
+                      className="h-7 w-7 object-contain drop-shadow-sm"
+                      draggable={false}
+                    />
+                  ) : (
+                    draft.icon || TYPE_ICON[draft.type]
+                  )}
                 </div>
               </div>
               <label className="flex flex-col gap-1.5">
@@ -936,7 +946,16 @@ export default function LauncherPage({ editItemId = null, onEditItemHandled } = 
                       className="flex h-12 w-12 items-center justify-center rounded-2xl text-2xl shadow-sm"
                       style={{ background: launcherColorGradient(item.color) }}
                     >
-                      {item.icon || TYPE_ICON[item.type]}
+                      {item.iconImage ? (
+                        <img
+                          src={item.iconImage}
+                          alt=""
+                          className="h-[30px] w-[30px] object-contain drop-shadow-sm"
+                          draggable={false}
+                        />
+                      ) : (
+                        item.icon || TYPE_ICON[item.type]
+                      )}
                     </span>
                     <span className="w-full truncate text-center text-[11px] font-medium leading-tight text-slate-800">
                       {item.title}

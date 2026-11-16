@@ -6,7 +6,6 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { BrowserWindow, app, dialog, shell } from 'electron';
 import { APP_NAME } from '../../shared/constants.js';
-import { decorateLauncherItemsForUi } from '../../shared/launcherColors.js';
 import { ApiError, defineApi } from '../api/registry.js';
 import {
   broadcastLauncherItemsChanged,
@@ -15,8 +14,10 @@ import {
   hideFloatingLauncher,
   removeItemFromFloating,
   resetFloatingPosition,
+  setFloatingCollapsed,
   showFloatingLauncher,
 } from '../launcher/floatingWindow.js';
+import { clearLauncherIconCache, presentLauncherItems } from '../launcher/fileIcon.js';
 import { resolveDroppedPath } from '../launcher/resolveDrop.js';
 import {
   addLauncherItems,
@@ -83,25 +84,34 @@ function spawnDetachedExe(target) {
 }
 
 export function register() {
-  defineApi('launcher.list', () => ({ items: listLauncherItems() }));
+  defineApi('launcher.list', async () => ({ items: await presentLauncherItems() }));
 
   defineApi('launcher.save', async (body) => {
     const items = await saveLauncherItems(body?.items);
-    notifyLauncherClients();
-    return { items };
+    notifyLauncherClients(items);
+    return { items: await presentLauncherItems(items) };
   });
 
   defineApi('launcher.upsert', async (body) => {
     try {
-      const items = await upsertLauncherItem(body?.item ?? body);
-      notifyLauncherClients();
-      return { items };
+      const item = body?.item ?? body;
+      const id = String(item?.id ?? '').trim();
+      if (id) clearLauncherIconCache(id);
+      const items = await upsertLauncherItem(item);
+      notifyLauncherClients(items);
+      return { items: await presentLauncherItems(items) };
     } catch (err) {
       throw new ApiError(err instanceof Error ? err.message : String(err));
     }
   });
 
-  defineApi('launcher.floating.show', () => showFloatingLauncher());
+  defineApi('launcher.floating.show', async (body) => {
+    // expand: true 이면 접힌 상태여도 펼쳐서 표시 (우하단 런처 버튼 등)
+    if (body?.expand) {
+      await setFloatingCollapsed(false);
+    }
+    return showFloatingLauncher();
+  });
   defineApi('launcher.floating.hide', () => hideFloatingLauncher());
   defineApi('launcher.floating.focusMain', () => focusMainFromFloating());
   defineApi('launcher.floating.resetPosition', () => resetFloatingPosition());
@@ -168,10 +178,10 @@ export function register() {
     }
 
     const result = await addLauncherItems(drafts);
-    notifyLauncherClients();
+    notifyLauncherClients(result.items);
     return {
-      // 플로팅이 응답 items 로 다시 그릴 때 색이 기본값으로 덮이지 않도록 from/to 포함
-      items: decorateLauncherItemsForUi(result.items),
+      // 색상·파일 아이콘을 붙여 플로팅/메인이 바로 쓰게 함
+      items: await presentLauncherItems(result.items),
       added: result.added,
       skipped: result.skipped + failures.length,
       failures: failures.slice(0, 8),
@@ -201,7 +211,7 @@ export function register() {
     if (result.canceled || !result.filePaths?.length) {
       return {
         cancelled: true,
-        items: decorateLauncherItemsForUi(listLauncherItems()),
+        items: await presentLauncherItems(),
       };
     }
     try {
@@ -215,9 +225,10 @@ export function register() {
   defineApi('launcher.remove', async (body) => {
     const id = String(body?.id ?? '');
     if (!id) throw new ApiError('삭제할 항목이 없습니다.');
+    clearLauncherIconCache(id);
     const items = await removeLauncherItem(id);
-    notifyLauncherClients();
-    return { items };
+    notifyLauncherClients(items);
+    return { items: await presentLauncherItems(items) };
   });
 
   defineApi('launcher.open', async (body) => {
@@ -326,7 +337,7 @@ export function register() {
     }
 
     const items = await saveLauncherItems(nextRaw);
-    notifyLauncherClients();
-    return { ok: true, mode, count: items.length, items };
+    notifyLauncherClients(items);
+    return { ok: true, mode, count: items.length, items: await presentLauncherItems(items) };
   });
 }
