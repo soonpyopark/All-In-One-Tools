@@ -24,7 +24,7 @@ export const APP_FILE_NAME = 'AllTools';
  * - Git 태그·GitHub Release: `v1.0.1-N`  (하이픈) ← `APP_GIT_TAG`
  * - `package.json` version: `1.0.1-N`  (electron-builder semver)
  */
-export const APP_VERSION = '1.0.1.7';
+export const APP_VERSION = '1.0.1.8';
 
 /**
  * Git 태그 문자열. `1.0.1.5` → `v1.0.1-5`

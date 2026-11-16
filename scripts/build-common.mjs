@@ -74,12 +74,15 @@ export function buildRenderer() {
 export function packageElectron(platform, arch, outputDir) {
   fs.rmSync(outputDir, { recursive: true, force: true });
   const relative = path.relative(projectRoot, outputDir).split(path.sep).join('/');
+  // package.json 의 1.0.1-N 은 Windows FixedFileInfo 가 1.0.0.0 으로 굳어
+  // MSI 업그레이드 시 exe 를 「동일 버전」으로 건너뛰게 만든다. APP_VERSION(점)을 쓴다.
   run('npx', [
     'electron-builder',
     `--${platform}`,
     'dir',
     `--${arch}`,
     `-c.directories.output=${relative}`,
+    `-c.buildVersion=${APP_VERSION}`,
   ]);
 }
 
