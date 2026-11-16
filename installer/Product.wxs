@@ -34,10 +34,11 @@
       닫기→트레이 유지 시 WM_CLOSE 만으로는 프로세스가 안 끝나므로
       타임아웃 후 TerminateProcess 로 강제 종료한다.
     -->
+    <!-- Description 은 MSI 코드페이지(1252)에 들어가므로 ASCII 만 사용 -->
     <util:CloseApplication
       Id="CloseAllTools"
       Target="$(ExeName)"
-      Description="$(AppName)을(를) 종료한 뒤 설치를 계속합니다."
+      Description="Closing $(AppName) so setup can continue."
       CloseMessage="yes"
       EndSessionMessage="yes"
       RebootPrompt="no"
