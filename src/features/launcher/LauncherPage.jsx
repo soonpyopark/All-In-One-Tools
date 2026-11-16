@@ -796,35 +796,10 @@ export default function LauncherPage({ editItemId = null, onEditItemHandled } = 
                 })}
               </div>
             </div>
-            <div className="mt-2 flex flex-wrap items-center gap-2">
-              <button
-                type="button"
-                className={btnClass}
-                title={
-                  draft.type === 'app' || draft.type === 'file' || draft.type === 'folder'
-                    ? '이모지를 기본값으로 되돌리고, 있으면 Windows 파일 아이콘을 다시 씁니다.'
-                    : '아이콘을 기본 이모지로 되돌립니다.'
-                }
-                onClick={() =>
-                  setDraft((current) => {
-                    if (!current) return current;
-                    const canFile =
-                      current.type === 'app' || current.type === 'file' || current.type === 'folder';
-                    return {
-                      ...current,
-                      icon: TYPE_ICON[current.type],
-                      useFileIcon: canFile,
-                    };
-                  })
-                }
-              >
-                아이콘 초기화
-              </button>
-              {draft.useFileIcon === false &&
-                (draft.type === 'app' || draft.type === 'file' || draft.type === 'folder') && (
-                  <span className="text-xs text-slate-500">선택한 이모지가 표시됩니다.</span>
-                )}
-            </div>
+            {draft.useFileIcon === false &&
+              (draft.type === 'app' || draft.type === 'file' || draft.type === 'folder') && (
+                <p className="mt-2 mb-0 text-xs text-slate-500">선택한 이모지가 표시됩니다.</p>
+              )}
             <div className="mt-2 max-h-[7.75rem] overflow-y-auto rounded-md border border-slate-200 bg-slate-50/80 p-2">
               <div className="grid grid-cols-[repeat(auto-fill,minmax(2rem,1fr))] gap-1.5">
                 {ICON_PRESET_UNIQUE.map((emoji) => (
@@ -866,6 +841,30 @@ export default function LauncherPage({ editItemId = null, onEditItemHandled } = 
               </button>
               <button type="button" className={btnClass} disabled={saving} onClick={() => setDraft(null)}>
                 취소
+              </button>
+              <button
+                type="button"
+                className={btnClass}
+                disabled={saving}
+                title={
+                  draft.type === 'app' || draft.type === 'file' || draft.type === 'folder'
+                    ? '이모지를 기본값으로 되돌리고, 있으면 Windows 파일 아이콘을 다시 씁니다.'
+                    : '아이콘을 기본 이모지로 되돌립니다.'
+                }
+                onClick={() =>
+                  setDraft((current) => {
+                    if (!current) return current;
+                    const canFile =
+                      current.type === 'app' || current.type === 'file' || current.type === 'folder';
+                    return {
+                      ...current,
+                      icon: TYPE_ICON[current.type],
+                      useFileIcon: canFile,
+                    };
+                  })
+                }
+              >
+                아이콘 초기화
               </button>
             </div>
           </Section>
