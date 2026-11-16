@@ -10,6 +10,7 @@ import {
   displayCharCount,
   integerQrSide,
 } from '../../../shared/qrUi.js';
+import QrCameraScan from './QrCameraScan.jsx';
 
 const TITLE = 'QR 코드 생성기';
 
@@ -87,12 +88,18 @@ export default function QrPage() {
   const [autoCopy, setAutoCopy] = useState(true);
   const [openUrl, setOpenUrl] = useState(true);
   const [watch, setWatch] = useState(false);
-  const [recvStatus, setRecvStatus] = useState('대기 중  ·  영역 선택으로 QR을 고르세요');
+  const [cameraOn, setCameraOn] = useState(false);
+  const [recvStatus, setRecvStatus] = useState('대기 중  ·  영역 선택 또는 카메라로 QR을 고르세요');
   const autoCopyRef = useRef(autoCopy);
   const openUrlRef = useRef(openUrl);
   autoCopyRef.current = autoCopy;
   openUrlRef.current = openUrl;
   resultTextRef.current = resultText;
+
+  // 보내기로 나가면 카메라 스트림 정리
+  useEffect(() => {
+    if (mode !== 'receiver' && cameraOn) setCameraOn(false);
+  }, [mode, cameraOn]);
 
   /**
    * @param {string} [value]
@@ -205,12 +212,12 @@ export default function QrPage() {
   );
 
   useEffect(() => {
-    if (mode !== 'receiver' || !watch || !lastRegion) return undefined;
+    if (mode !== 'receiver' || !watch || !lastRegion || cameraOn) return undefined;
     const id = setInterval(() => {
       void rescan('감시');
     }, 1000);
     return () => clearInterval(id);
-  }, [mode, watch, lastRegion, rescan]);
+  }, [mode, watch, lastRegion, cameraOn, rescan]);
 
   const pasteClipboard = async () => {
     try {
@@ -280,6 +287,7 @@ export default function QrPage() {
   };
 
   const pickRegionScan = async () => {
+    if (cameraOn) setCameraOn(false);
     setRecvStatus('화면을 캡처하는 중…');
     try {
       const result = await api('qr.scanPick');
@@ -287,6 +295,17 @@ export default function QrPage() {
     } catch (err) {
       setRecvStatus(err instanceof Error ? err.message : '영역 선택에 실패했습니다.');
     }
+  };
+
+  const toggleCamera = () => {
+    if (cameraOn) {
+      setCameraOn(false);
+      setRecvStatus('카메라를 껐습니다.');
+      return;
+    }
+    setPreviewUrl('');
+    setCameraOn(true);
+    setRecvStatus('카메라를 여는 중…');
   };
 
   const copyResult = async () => {
@@ -409,7 +428,14 @@ export default function QrPage() {
             <button type="button" className={btnPrimaryClass} onClick={() => void pickRegionScan()}>
               영역 선택
             </button>
-            <button type="button" className={btnClass} disabled={!lastRegion} onClick={() => void rescan()}>
+            <button
+              type="button"
+              className={cameraOn ? btnPrimaryClass : btnClass}
+              onClick={toggleCamera}
+            >
+              {cameraOn ? '카메라 끄기' : '카메라로 받기'}
+            </button>
+            <button type="button" className={btnClass} disabled={!lastRegion || cameraOn} onClick={() => void rescan()}>
               다시 스캔
             </button>
             <button type="button" className={btnClass} disabled={!resultText} onClick={() => void copyResult()}>
@@ -430,18 +456,34 @@ export default function QrPage() {
               className="inline-flex items-center gap-2 text-sm text-slate-700"
               title="마지막 선택 영역을 주기적으로 다시 읽어 QR이 바뀌면 갱신합니다."
             >
-              <input type="checkbox" checked={watch} onChange={(e) => setWatch(e.target.checked)} />
+              <input
+                type="checkbox"
+                checked={watch}
+                disabled={cameraOn}
+                onChange={(e) => setWatch(e.target.checked)}
+              />
               선택 영역 감시
             </label>
           </div>
 
           <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-2">
-            <Section title="캡처 미리보기">
-              <div className="flex min-h-[20rem] flex-1 items-center justify-center rounded-lg bg-white p-2">
-                {previewUrl ? (
+            <Section title={cameraOn ? '카메라 미리보기' : '캡처 미리보기'}>
+              <div className="flex min-h-[20rem] flex-1 items-center justify-center rounded-lg bg-slate-900 p-2">
+                {cameraOn ? (
+                  <QrCameraScan
+                    active={cameraOn}
+                    onDecoded={(result) => void applyScanResult(result)}
+                    onStatus={setRecvStatus}
+                    onFatal={(msg) => {
+                      setCameraOn(false);
+                      setRecvStatus(msg);
+                      void dialog.alert({ title: TITLE, body: msg });
+                    }}
+                  />
+                ) : previewUrl ? (
                   <img src={previewUrl} alt="캡처 미리보기" className="max-h-[28rem] max-w-full object-contain" />
                 ) : (
-                  <p className="m-0 text-sm text-slate-400">영역 선택 후 QR이 여기에 표시됩니다</p>
+                  <p className="m-0 text-sm text-slate-400">영역 선택 또는 카메라로 QR을 비추면 여기에 표시됩니다</p>
                 )}
               </div>
             </Section>
@@ -461,7 +503,9 @@ export default function QrPage() {
 
           <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
             <span className="text-emerald-700">{recvStatus}</span>
-            <span className="text-slate-500">OBS/캡처보드가 보이는 모니터에서 QR을 드래그하세요.</span>
+            <span className="text-slate-500">
+              화면 영역 선택 또는 웹캠으로 QR을 받을 수 있습니다. 압축(QRT1)은 이 프로그램에서만 복원됩니다.
+            </span>
           </div>
         </div>
       )}

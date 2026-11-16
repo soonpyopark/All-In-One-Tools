@@ -1,4 +1,4 @@
-import { app, BrowserWindow, dialog, ipcMain, Menu, shell } from 'electron';
+import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'electron';
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
@@ -151,6 +151,13 @@ async function boot() {
 
   setupMenu();
   registerIpc();
+  // QR 받기·기타 getUserMedia 용 카메라/마이크 권한 (표시 캡처는 기존 desktopCapturer 경로)
+  session.defaultSession.setPermissionRequestHandler((_wc, permission, callback) => {
+    callback(permission === 'media' || permission === 'display-capture');
+  });
+  session.defaultSession.setPermissionCheckHandler((_wc, permission) => {
+    return permission === 'media' || permission === 'display-capture';
+  });
   createMainWindow();
 
   if (getSettings().floatingLauncherOnStart === true) {
