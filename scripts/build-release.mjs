@@ -15,6 +15,7 @@ import path from 'node:path';
 import {
   APP_FILE_NAME,
   APP_NAME,
+  APP_GIT_TAG,
   APP_VERSION,
   RELEASE_DIR,
   STAGING_DIR,
@@ -45,7 +46,7 @@ function resolveWix() {
 
 /**
  * MSI ProductVersion (최대 4단).
- * - x.y.z.w 이면 그대로 사용 (태그 v1.0.1.5 등과 맞춤)
+ * - x.y.z.w (APP_VERSION) 이면 그대로 사용 — Git 태그는 v1.0.1-N (하이픈) 별도
  * - x.y.z 만 있으면 4번째에 분 단위 카운터를 붙여 업그레이드 인식
  */
 function toMsiVersion(version) {
@@ -159,6 +160,7 @@ function main() {
   log('done');
   log(`  ${path.relative(projectRoot, msiPath)}  (${size(msiPath)})`);
   log(`  ${path.relative(projectRoot, zipPath)}  (${size(zipPath)})`);
+  log(`  app version v${APP_VERSION}  /  git tag ${APP_GIT_TAG}`);
 }
 
 try {

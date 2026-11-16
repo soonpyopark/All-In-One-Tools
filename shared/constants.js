@@ -16,7 +16,31 @@ export const APP_USER_MODEL_ID = 'com.alltools.app';
 /** File-system friendly name used in installer / archive file names. */
 export const APP_FILE_NAME = 'AllTools';
 
+/**
+ * 앱 표시·MSI ProductVersion (점 구분). 예: `1.0.1.5`
+ *
+ * 배포 시 버전 표기 규칙 (이후 릴리스도 동일):
+ * - UI / `APP_VERSION` / MSI: `1.0.1.N`  (점)
+ * - Git 태그·GitHub Release: `v1.0.1-N`  (하이픈) ← `APP_GIT_TAG`
+ * - `package.json` version: `1.0.1-N`  (electron-builder semver)
+ */
 export const APP_VERSION = '1.0.1.5';
+
+/**
+ * Git 태그 문자열. `1.0.1.5` → `v1.0.1-5`
+ * @param {string} [version]
+ */
+export function formatAppGitTag(version = APP_VERSION) {
+  const body = String(version ?? '')
+    .trim()
+    .replace(/^v/i, '');
+  const matched = /^(\d+\.\d+\.\d+)\.(\d+)$/.exec(body);
+  if (matched) return `v${matched[1]}-${matched[2]}`;
+  return `v${body}`;
+}
+
+/** 현재 릴리스용 Git 태그 (예: v1.0.1-5) */
+export const APP_GIT_TAG = formatAppGitTag(APP_VERSION);
 
 /**
  * Package build id (YYMMDD_HHMMSS). Rewritten by `npm run build:release*`
