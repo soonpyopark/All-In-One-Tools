@@ -23,6 +23,7 @@ import {
   getSoundPath,
   listAlarms,
   removeAlarm,
+  removeDisabledAlarms,
   saveAlarms,
   setSoundPath,
   upsertAlarm,
@@ -68,6 +69,11 @@ export function register() {
     if (!id) throw new ApiError('삭제할 알람이 없습니다.');
     const alarms = await removeAlarm(id);
     return { alarms };
+  });
+
+  defineApi('clock.alarms.removeDisabled', async () => {
+    const result = await removeDisabledAlarms();
+    return result;
   });
 
   defineApi('clock.alarms.export', async () => {

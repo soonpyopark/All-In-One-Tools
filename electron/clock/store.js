@@ -12,8 +12,9 @@ const SOUND_EXTS = new Set(['.wav', '.mp3', '.m4a', '.aac', '.ogg', '.flac', '.w
  *   id: string,
  *   title: string,
  *   time: string,
+ *   date: string | null,
  *   enabled: boolean,
- *   repeat: 'once' | 'daily',
+ *   repeat: 'once' | 'daily' | 'date',
  *   snoozeUntil: number | null,
  *   lastFiredKey: string,
  * }} AlarmItem
@@ -31,6 +32,24 @@ function normalizeTime(raw) {
   const min = Number(m[2]);
   if (h < 0 || h > 23 || min < 0 || min > 59) return '';
   return `${String(h).padStart(2, '0')}:${String(min).padStart(2, '0')}`;
+}
+
+/**
+ * YYYY-MM-DD 실존 일자만 허용. 아니면 빈 문자열.
+ * @param {unknown} raw
+ * @returns {string}
+ */
+function normalizeDate(raw) {
+  const text = String(raw ?? '').trim();
+  const m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(text);
+  if (!m) return '';
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (mo < 1 || mo > 12 || d < 1 || d > 31) return '';
+  const dt = new Date(y, mo - 1, d);
+  if (dt.getFullYear() !== y || dt.getMonth() !== mo - 1 || dt.getDate() !== d) return '';
+  return `${String(y).padStart(4, '0')}-${String(mo).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
 }
 
 /**
@@ -60,7 +79,12 @@ function normalizeAlarm(raw) {
   const title = String(src.title ?? '').trim().slice(0, 80) || '알람';
   const id =
     typeof src.id === 'string' && /^[A-Za-z0-9-]{1,64}$/.test(src.id) ? src.id : randomUUID();
-  const repeat = src.repeat === 'daily' ? 'daily' : 'once';
+  /** @type {AlarmItem['repeat']} */
+  let repeat = 'once';
+  if (src.repeat === 'daily') repeat = 'daily';
+  else if (src.repeat === 'date') repeat = 'date';
+  const date = repeat === 'date' ? normalizeDate(src.date) : null;
+  if (repeat === 'date' && !date) return null;
   const snoozeUntil =
     typeof src.snoozeUntil === 'number' && Number.isFinite(src.snoozeUntil) ? src.snoozeUntil : null;
   const lastFiredKey = typeof src.lastFiredKey === 'string' ? src.lastFiredKey.slice(0, 64) : '';
@@ -68,6 +92,7 @@ function normalizeAlarm(raw) {
     id,
     title,
     time,
+    date,
     enabled: src.enabled !== false,
     repeat,
     snoozeUntil,
@@ -189,6 +214,20 @@ export function removeAlarm(id) {
 }
 
 /**
+ * 꺼진(enabled=false) 알람만 일괄 삭제합니다.
+ * @returns {Promise<{ alarms: AlarmItem[], removed: number }>}
+ */
+export function removeDisabledAlarms() {
+  return withFileLock(statePath(CLOCK_FILE), () => {
+    const current = listAlarmsUnlocked();
+    const next = current.filter((item) => item.enabled);
+    const removed = current.length - next.length;
+    writeClockFile(next);
+    return { alarms: next, removed };
+  });
+}
+
+/**
  * @param {string} id
  * @param {(alarm: AlarmItem) => AlarmItem} mutator
  * @returns {Promise<AlarmItem[]>}
@@ -206,4 +245,4 @@ export function patchAlarm(id, mutator) {
   });
 }
 
-export { normalizeTime, SOUND_EXTS };
+export { normalizeTime, normalizeDate, SOUND_EXTS };

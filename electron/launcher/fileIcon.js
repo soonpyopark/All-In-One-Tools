@@ -105,6 +105,8 @@ export async function attachFileIcons(items) {
   const list = Array.isArray(items) ? items : [];
   return Promise.all(
     list.map(async (item) => {
+      // 사용자가 이모지 아이콘을 선택한 항목은 OS 아이콘을 붙이지 않음
+      if (item?.useFileIcon === false) return { ...item };
       const iconImage = await resolveLauncherIconImage(item);
       if (!iconImage) return { ...item };
       return { ...item, iconImage };

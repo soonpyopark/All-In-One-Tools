@@ -4,7 +4,7 @@ import { useDialog } from '../../context/DialogContext.jsx';
 import { JobActivityProvider, useJobActivity } from '../../context/JobActivityContext.jsx';
 import { FEATURES } from '../../features/registry.js';
 import { api, getNative } from '../../lib/apiClient.js';
-import { orderFeatures } from '../../lib/featureOrder.js';
+import { canFavoriteFeature, orderFeatures } from '../../lib/featureOrder.js';
 import { runStartupUpdateCheck } from '../../lib/updateCheckUi.js';
 import SettingsView from '../settings/SettingsView.jsx';
 import TopBar from './TopBar.jsx';
@@ -74,6 +74,7 @@ function AppShellInner() {
   const [resetKeys, setResetKeys] = useState(/** @type {Record<string, number>} */ ({}));
 
   const [featureOrder, setFeatureOrder] = useState(/** @type {string[]} */ ([]));
+  const [featureFavorites, setFeatureFavorites] = useState(/** @type {string[]} */ ([]));
   /** Windows 전용 메뉴 등은 현재 OS 에 맞게 걸러냅니다. */
   const platformFeatures = useMemo(() => {
     const platform = appInfo?.platform || (typeof process !== 'undefined' ? process.platform : '');
@@ -82,8 +83,8 @@ function AppShellInner() {
     );
   }, [appInfo?.platform]);
   const features = useMemo(
-    () => orderFeatures(platformFeatures, featureOrder),
-    [platformFeatures, featureOrder],
+    () => orderFeatures(platformFeatures, featureOrder, featureFavorites),
+    [platformFeatures, featureOrder, featureFavorites],
   );
   const [activeId, setActiveId] = useState(FEATURES[0]?.id ?? '');
   const active = features.find((feature) => feature.id === activeId) ?? features[0];
@@ -113,6 +114,7 @@ function AppShellInner() {
       .then((settings) => {
         if (!alive) return;
         setFeatureOrder(Array.isArray(settings?.featureOrder) ? settings.featureOrder : []);
+        setFeatureFavorites(Array.isArray(settings?.featureFavorites) ? settings.featureFavorites : []);
       })
       .catch(() => undefined);
     return () => {
@@ -168,7 +170,9 @@ function AppShellInner() {
   );
 
   const saveFeatureOrder = async (ids) => {
-    const next = Array.isArray(ids) ? ids.map(String).filter((id) => id && id !== 'home') : [];
+    const next = Array.isArray(ids)
+      ? ids.map(String).filter((id) => id && id !== 'home' && id !== 'launcher')
+      : [];
     setFeatureOrder(next);
     try {
       const settings = await api('settings.update', { featureOrder: next });
@@ -178,16 +182,38 @@ function AppShellInner() {
     }
   };
 
+  const toggleFeatureFavorite = async (featureId) => {
+    const id = String(featureId ?? '');
+    if (!canFavoriteFeature(id)) return;
+    const has = featureFavorites.includes(id);
+    const next = has ? featureFavorites.filter((item) => item !== id) : [...featureFavorites, id];
+    setFeatureFavorites(next);
+    try {
+      const settings = await api('settings.update', { featureFavorites: next });
+      if (Array.isArray(settings?.featureFavorites)) setFeatureFavorites(settings.featureFavorites);
+    } catch {
+      // 저장 실패해도 화면 상태는 유지
+    }
+  };
+
   const resetPage = async () => {
     if (!active?.id) return;
     if (active.id === 'home') {
       const ok = await dialog.confirm({
         title: '메뉴 순서 초기화',
-        body: '홈·사이드바 메뉴 순서를 처음 상태로 되돌립니다.',
+        body: '홈·사이드바 메뉴 순서와 즐겨찾기를 처음 상태로 되돌립니다. 홈·런처는 그대로 맨 위에 둡니다.',
         confirmLabel: '초기화',
       });
       if (!ok) return;
-      await saveFeatureOrder([]);
+      setFeatureOrder([]);
+      setFeatureFavorites([]);
+      try {
+        const settings = await api('settings.update', { featureOrder: [], featureFavorites: [] });
+        if (Array.isArray(settings?.featureOrder)) setFeatureOrder(settings.featureOrder);
+        if (Array.isArray(settings?.featureFavorites)) setFeatureFavorites(settings.featureFavorites);
+      } catch {
+        // ignore
+      }
       setResetKeys((prev) => ({
         ...prev,
         [active.id]: (prev[active.id] || 0) + 1,
@@ -428,6 +454,8 @@ function AppShellInner() {
                     features={features}
                     onNavigate={goTo}
                     onReorder={feature.id === 'home' ? saveFeatureOrder : undefined}
+                    favoriteIds={feature.id === 'home' ? featureFavorites : undefined}
+                    onToggleFavorite={feature.id === 'home' ? toggleFeatureFavorite : undefined}
                     editItemId={feature.id === 'launcher' ? launcherEditId : undefined}
                     onEditItemHandled={
                       feature.id === 'launcher' ? () => setLauncherEditId(null) : undefined

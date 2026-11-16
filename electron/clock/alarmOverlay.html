@@ -1,0 +1,132 @@
+<!doctype html>
+<html lang="ko">
+  <head>
+    <meta charset="utf-8" />
+    <title>알람</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        height: 100%;
+        overflow: hidden;
+        background: transparent;
+        font-family: 'Segoe UI', 'Malgun Gothic', sans-serif;
+        user-select: none;
+      }
+      .frame {
+        box-sizing: border-box;
+        height: 100%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: rgba(15, 23, 42, 0.55);
+        border: 10px solid #f59e0b;
+      }
+      .card {
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        gap: 20px;
+        min-width: min(720px, 86vw);
+        max-width: 920px;
+        padding: 48px 56px;
+        border-radius: 28px;
+        background: rgba(15, 23, 42, 0.92);
+        color: #fff;
+        box-shadow: 0 24px 80px rgba(0, 0, 0, 0.45);
+        text-align: center;
+      }
+      .badge {
+        margin: 0;
+        font-size: 22px;
+        font-weight: 700;
+        letter-spacing: 0.08em;
+        color: #fcd34d;
+        text-transform: uppercase;
+      }
+      .title {
+        margin: 0;
+        font-size: 56px;
+        font-weight: 800;
+        line-height: 1.2;
+        word-break: keep-all;
+      }
+      .hint {
+        margin: 0;
+        font-size: 18px;
+        color: #cbd5e1;
+      }
+      .actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 14px;
+        justify-content: center;
+        margin-top: 8px;
+      }
+      button {
+        appearance: none;
+        border: 0;
+        border-radius: 14px;
+        padding: 16px 28px;
+        font-size: 20px;
+        font-weight: 700;
+        cursor: pointer;
+        font-family: inherit;
+      }
+      .primary {
+        background: #f59e0b;
+        color: #1c1917;
+        min-width: 160px;
+      }
+      .primary:hover {
+        background: #fbbf24;
+      }
+      .secondary {
+        background: rgba(255, 255, 255, 0.12);
+        color: #f8fafc;
+        border: 1px solid rgba(255, 255, 255, 0.28);
+      }
+      .secondary:hover {
+        background: rgba(255, 255, 255, 0.2);
+      }
+      .secondary[hidden] {
+        display: none;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="frame">
+      <div class="card">
+        <p class="badge" id="badge">알람</p>
+        <p class="title" id="title">시간이 되었습니다.</p>
+        <p class="hint">닫기를 누를 때까지 이 화면이 유지됩니다.</p>
+        <div class="actions">
+          <button type="button" class="primary" id="btnDismiss">닫기</button>
+          <button type="button" class="secondary" id="btnSnooze" hidden>5분 스누즈</button>
+        </div>
+      </div>
+    </div>
+    <script>
+      const badge = document.getElementById('badge');
+      const title = document.getElementById('title');
+      const btnDismiss = document.getElementById('btnDismiss');
+      const btnSnooze = document.getElementById('btnSnooze');
+
+      function applyPayload(payload) {
+        const kind = payload?.kind === 'timer' ? 'timer' : 'alarm';
+        badge.textContent = kind === 'timer' ? '타이머 종료' : '알람';
+        title.textContent = String(payload?.title || '').trim() || '시간이 되었습니다.';
+        btnSnooze.hidden = kind !== 'alarm';
+      }
+
+      window.alarmOverlay.onPayload(applyPayload);
+
+      btnDismiss.addEventListener('click', () => {
+        void window.alarmOverlay.dismiss();
+      });
+      btnSnooze.addEventListener('click', () => {
+        void window.alarmOverlay.snooze(5);
+      });
+    </script>
+  </body>
+</html>

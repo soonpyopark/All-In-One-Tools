@@ -11,9 +11,14 @@
 
   Mutable state (settings) lives in %APPDATA% — never inside
   the install folder — so upgrades and uninstalls cannot wipe it.
+
+  트레이/플로팅이 켜진 채 업그레이드하면 exe·asar 가 잠겨 파일이 반만 바뀌고,
+  같은 MSI 를 다시 돌려 Repair 할 때만 정상 실행되는 경우가 많다.
+  그래서 설치·복구 직전에 실행 중 프로세스를 종료한다.
 -->
 <Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
-     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui"
+     xmlns:util="http://wixtoolset.org/schemas/v4/wxs/util">
   <Package
     Name="$(AppName)"
     Manufacturer="$(AppName)"
@@ -24,6 +29,20 @@
     Compressed="yes">
 
     <SummaryInformation Description="$(AppName)" />
+
+    <!--
+      닫기→트레이 유지 시 WM_CLOSE 만으로는 프로세스가 안 끝나므로
+      타임아웃 후 TerminateProcess 로 강제 종료한다.
+    -->
+    <util:CloseApplication
+      Id="CloseAllTools"
+      Target="$(ExeName)"
+      Description="$(AppName)을(를) 종료한 뒤 설치를 계속합니다."
+      CloseMessage="yes"
+      EndSessionMessage="yes"
+      RebootPrompt="no"
+      TerminateProcess="1"
+      Timeout="3" />
 
     <!-- A new ProductCode + AllowSameVersionUpgrades lets every build replace the previous one. -->
     <MajorUpgrade

@@ -25,6 +25,7 @@ function isExternalFileDrag(event) {
  *   icon: string,
  *   group: 'work' | 'personal' | 'general',
  *   color: string,
+ *   useFileIcon?: boolean,
  *   iconImage?: string,
  * }} LauncherItem
  */
@@ -211,6 +212,7 @@ function blankDraft(type) {
     icon: TYPE_ICON[type],
     group: 'general',
     color: DEFAULT_LAUNCHER_COLOR,
+    useFileIcon: type === 'app' || type === 'file' || type === 'folder',
   };
 }
 
@@ -533,6 +535,7 @@ export default function LauncherPage({ editItemId = null, onEditItemHandled } = 
         icon: String(draft.icon || TYPE_ICON[draft.type]).slice(0, 32),
         group: draft.group === 'work' || draft.group === 'personal' ? draft.group : 'general',
         color: normalizeLauncherColorId(draft.color),
+        useFileIcon: draft.useFileIcon !== false,
       };
       const res = await api('launcher.upsert', { item: payload });
       setItems(Array.isArray(res?.items) ? res.items : items);
@@ -714,7 +717,7 @@ export default function LauncherPage({ editItemId = null, onEditItemHandled } = 
                   style={{ background: launcherColorGradient(draft.color) }}
                   aria-hidden
                 >
-                  {draft.iconImage ? (
+                  {draft.useFileIcon !== false && draft.iconImage ? (
                     <img
                       src={draft.iconImage}
                       alt=""
@@ -732,7 +735,13 @@ export default function LauncherPage({ editItemId = null, onEditItemHandled } = 
                   className={`${inputClass} text-center text-lg`}
                   value={draft.icon ?? ''}
                   maxLength={8}
-                  onChange={(event) => setDraft((current) => (current ? { ...current, icon: event.target.value } : current))}
+                  onChange={(event) =>
+                    setDraft((current) =>
+                      current
+                        ? { ...current, icon: event.target.value, useFileIcon: false }
+                        : current,
+                    )
+                  }
                 />
               </label>
               <label className="flex flex-col gap-1.5">
@@ -787,6 +796,35 @@ export default function LauncherPage({ editItemId = null, onEditItemHandled } = 
                 })}
               </div>
             </div>
+            <div className="mt-2 flex flex-wrap items-center gap-2">
+              <button
+                type="button"
+                className={btnClass}
+                title={
+                  draft.type === 'app' || draft.type === 'file' || draft.type === 'folder'
+                    ? '이모지를 기본값으로 되돌리고, 있으면 Windows 파일 아이콘을 다시 씁니다.'
+                    : '아이콘을 기본 이모지로 되돌립니다.'
+                }
+                onClick={() =>
+                  setDraft((current) => {
+                    if (!current) return current;
+                    const canFile =
+                      current.type === 'app' || current.type === 'file' || current.type === 'folder';
+                    return {
+                      ...current,
+                      icon: TYPE_ICON[current.type],
+                      useFileIcon: canFile,
+                    };
+                  })
+                }
+              >
+                아이콘 초기화
+              </button>
+              {draft.useFileIcon === false &&
+                (draft.type === 'app' || draft.type === 'file' || draft.type === 'folder') && (
+                  <span className="text-xs text-slate-500">선택한 이모지가 표시됩니다.</span>
+                )}
+            </div>
             <div className="mt-2 max-h-[7.75rem] overflow-y-auto rounded-md border border-slate-200 bg-slate-50/80 p-2">
               <div className="grid grid-cols-[repeat(auto-fill,minmax(2rem,1fr))] gap-1.5">
                 {ICON_PRESET_UNIQUE.map((emoji) => (
@@ -794,12 +832,16 @@ export default function LauncherPage({ editItemId = null, onEditItemHandled } = 
                     key={emoji}
                     type="button"
                     className={`flex h-8 w-full items-center justify-center rounded-md border text-base transition ${
-                      draft.icon === emoji
+                      draft.useFileIcon === false && draft.icon === emoji
                         ? 'border-app-accent bg-app-accentSoft'
                         : 'border-slate-200 bg-white hover:border-slate-300'
                     }`}
                     title="아이콘 선택"
-                    onClick={() => setDraft((current) => (current ? { ...current, icon: emoji } : current))}
+                    onClick={() =>
+                      setDraft((current) =>
+                        current ? { ...current, icon: emoji, useFileIcon: false } : current,
+                      )
+                    }
                   >
                     {emoji}
                   </button>
@@ -946,7 +988,7 @@ export default function LauncherPage({ editItemId = null, onEditItemHandled } = 
                       className="flex h-12 w-12 items-center justify-center rounded-2xl text-2xl shadow-sm"
                       style={{ background: launcherColorGradient(item.color) }}
                     >
-                      {item.iconImage ? (
+                      {item.useFileIcon !== false && item.iconImage ? (
                         <img
                           src={item.iconImage}
                           alt=""

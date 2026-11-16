@@ -72,6 +72,7 @@ export function registerCoreApi() {
     if ('ffmpegDir' in body) patch.ffmpegDir = typeof body.ffmpegDir === 'string' ? body.ffmpegDir.trim() : '';
     if ('exportDir' in body) patch.exportDir = typeof body.exportDir === 'string' ? body.exportDir.trim() : '';
     if ('featureOrder' in body) patch.featureOrder = body.featureOrder;
+    if ('featureFavorites' in body) patch.featureFavorites = body.featureFavorites;
     if ('autoLaunch' in body && runtime.autoLaunch?.supported) {
       runtime.autoLaunch.set(Boolean(body.autoLaunch));
     }

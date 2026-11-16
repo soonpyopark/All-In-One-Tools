@@ -9,8 +9,9 @@ import { showExportDone } from '../../lib/exportDone.jsx';
  *   id: string,
  *   title: string,
  *   time: string,
+ *   date?: string | null,
  *   enabled: boolean,
- *   repeat: 'once' | 'daily',
+ *   repeat: 'once' | 'daily' | 'date',
  *   snoozeUntil?: number | null,
  * }} AlarmItem
  */
@@ -36,6 +37,30 @@ function formatDate(date) {
   return `${date.getFullYear()}년 ${date.getMonth() + 1}월 ${date.getDate()}일 (${week[date.getDay()]})`;
 }
 
+/** @param {Date} [date] */
+function toDateInputValue(date = new Date()) {
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}`;
+}
+
+/** @param {AlarmItem} alarm */
+function alarmSortKey(alarm) {
+  if (alarm.repeat === 'date' && alarm.date) return `${alarm.date}T${alarm.time}`;
+  return `9999-99-99T${alarm.time}`;
+}
+
+/** @param {AlarmItem} alarm */
+function alarmRepeatLabel(alarm) {
+  if (alarm.repeat === 'daily') return '매일';
+  if (alarm.repeat === 'date') return '날짜';
+  return '일회';
+}
+
+/** @param {AlarmItem} alarm */
+function alarmWhenLabel(alarm) {
+  if (alarm.repeat === 'date' && alarm.date) return `${alarm.date} ${alarm.time}`;
+  return alarm.time;
+}
+
 function formatDuration(ms) {
   const total = Math.max(0, Math.ceil(ms / 1000));
   const h = Math.floor(total / 3600);
@@ -57,7 +82,8 @@ export default function ClockPage() {
   const [timerSec, setTimerSec] = useState(0);
   const [draftTitle, setDraftTitle] = useState('알람');
   const [draftTime, setDraftTime] = useState('09:00');
-  const [draftRepeat, setDraftRepeat] = useState(/** @type {'once' | 'daily'} */ ('once'));
+  const [draftDate, setDraftDate] = useState(() => toDateInputValue());
+  const [draftRepeat, setDraftRepeat] = useState(/** @type {'once' | 'daily' | 'date'} */ ('once'));
   const [soundPath, setSoundPath] = useState('');
   const [busy, setBusy] = useState(false);
 
@@ -89,7 +115,7 @@ export default function ClockPage() {
   }, []);
 
   const sortedAlarms = useMemo(
-    () => [...alarms].sort((a, b) => String(a.time).localeCompare(String(b.time))),
+    () => [...alarms].sort((a, b) => alarmSortKey(a).localeCompare(alarmSortKey(b))),
     [alarms],
   );
 
@@ -100,12 +126,27 @@ export default function ClockPage() {
   }, [soundPath]);
 
   const addAlarm = async () => {
+    if (draftRepeat === 'date') {
+      if (!draftDate) {
+        void dialog.alert({ title: '알람 추가', body: '날짜를 선택하세요.' });
+        return;
+      }
+      const when = new Date(`${draftDate}T${draftTime}:00`);
+      if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) {
+        void dialog.alert({
+          title: '알람 추가',
+          body: '지난 일시는 등록할 수 없습니다. 미래 날짜와 시각을 선택하세요.',
+        });
+        return;
+      }
+    }
     setBusy(true);
     try {
       const res = await api('clock.alarms.upsert', {
         alarm: {
           title: draftTitle.trim() || '알람',
           time: draftTime,
+          date: draftRepeat === 'date' ? draftDate : null,
           enabled: true,
           repeat: draftRepeat,
         },
@@ -138,7 +179,7 @@ export default function ClockPage() {
   const removeAlarm = async (alarm) => {
     const ok = await dialog.confirm({
       title: '알람 삭제',
-      body: `「${alarm.title}」 ${alarm.time} 알람을 삭제할까요?`,
+      body: `「${alarm.title}」 ${alarmWhenLabel(alarm)} 알람을 삭제할까요?`,
       confirmLabel: '삭제',
       confirmVariant: 'danger',
     });
@@ -150,6 +191,31 @@ export default function ClockPage() {
       void dialog.alert({
         title: '삭제 실패',
         body: err instanceof Error ? err.message : '삭제하지 못했습니다.',
+      });
+    }
+  };
+
+  const disabledCount = useMemo(() => alarms.filter((item) => !item.enabled).length, [alarms]);
+
+  const removeDisabledAlarms = async () => {
+    if (disabledCount < 1) {
+      void dialog.alert({ title: '꺼진 알람 삭제', body: '꺼진 알람이 없습니다.' });
+      return;
+    }
+    const ok = await dialog.confirm({
+      title: '꺼진 알람 일괄 삭제',
+      body: `꺼진 알람 ${disabledCount}개를 모두 삭제할까요? 켜져 있는 알람은 그대로 둡니다.`,
+      confirmLabel: '삭제',
+      confirmVariant: 'danger',
+    });
+    if (!ok) return;
+    try {
+      const res = await api('clock.alarms.removeDisabled');
+      setAlarms(Array.isArray(res?.alarms) ? res.alarms : alarms.filter((item) => item.enabled));
+    } catch (err) {
+      void dialog.alert({
+        title: '삭제 실패',
+        body: err instanceof Error ? err.message : '꺼진 알람을 삭제하지 못했습니다.',
       });
     }
   };
@@ -318,7 +384,7 @@ export default function ClockPage() {
         <section>
           <h1 className="m-0 text-xl font-semibold text-slate-900">시간 & 알람</h1>
           <p className="mt-1 text-sm text-slate-500">
-            현재 시각, 타이머, 알람을 사용합니다. 다른 메뉴에 있어도 메인에서 울립니다.
+            현재 시각, 타이머, 알람을 사용합니다. 울리면 화면 가운데에 큰 알림이 뜨며, 닫기를 누를 때까지 유지됩니다.
           </p>
         </section>
 
@@ -373,9 +439,18 @@ export default function ClockPage() {
 
         <Section
           title="알람"
-          description="지정한 시각에 알림이 울립니다. 일회/매일을 고를 수 있습니다."
+          description="지정한 시각에 알림이 울립니다. 일회·매일·특정 날짜를 고를 수 있습니다."
           actions={
             <div className="flex flex-wrap gap-2">
+              <button
+                type="button"
+                className={btnClass}
+                disabled={disabledCount < 1}
+                title={disabledCount < 1 ? '꺼진 알람이 없습니다' : `꺼진 알람 ${disabledCount}개 삭제`}
+                onClick={() => void removeDisabledAlarms()}
+              >
+                꺼진 알람 삭제{disabledCount > 0 ? ` (${disabledCount})` : ''}
+              </button>
               <button type="button" className={btnClass} onClick={() => void exportAlarms()}>
                 내보내기
               </button>
@@ -396,6 +471,34 @@ export default function ClockPage() {
               />
             </label>
             <label className="flex flex-col gap-1.5">
+              <span className="text-xs font-medium text-slate-600">반복</span>
+              <select
+                className={inputClass}
+                value={draftRepeat}
+                onChange={(event) => {
+                  const next = /** @type {'once' | 'daily' | 'date'} */ (event.target.value);
+                  setDraftRepeat(next);
+                  if (next === 'date' && !draftDate) setDraftDate(toDateInputValue());
+                }}
+              >
+                <option value="once">일회</option>
+                <option value="daily">매일</option>
+                <option value="date">날짜 지정</option>
+              </select>
+            </label>
+            {draftRepeat === 'date' ? (
+              <label className="flex flex-col gap-1.5">
+                <span className="text-xs font-medium text-slate-600">날짜</span>
+                <input
+                  type="date"
+                  className={`${inputClass} w-40`}
+                  value={draftDate}
+                  min={toDateInputValue()}
+                  onChange={(event) => setDraftDate(event.target.value)}
+                />
+              </label>
+            ) : null}
+            <label className="flex flex-col gap-1.5">
               <span className="text-xs font-medium text-slate-600">시각</span>
               <input
                 type="time"
@@ -403,17 +506,6 @@ export default function ClockPage() {
                 value={draftTime}
                 onChange={(event) => setDraftTime(event.target.value)}
               />
-            </label>
-            <label className="flex flex-col gap-1.5">
-              <span className="text-xs font-medium text-slate-600">반복</span>
-              <select
-                className={inputClass}
-                value={draftRepeat}
-                onChange={(event) => setDraftRepeat(/** @type {'once' | 'daily'} */ (event.target.value))}
-              >
-                <option value="once">일회</option>
-                <option value="daily">매일</option>
-              </select>
             </label>
             <button type="button" className={btnPrimaryClass} disabled={busy} onClick={() => void addAlarm()}>
               추가
@@ -435,9 +527,11 @@ export default function ClockPage() {
                   >
                     {alarm.enabled ? '켜짐' : '꺼짐'}
                   </button>
-                  <span className="font-mono text-lg font-semibold tabular-nums text-slate-900">{alarm.time}</span>
+                  <span className="font-mono text-lg font-semibold tabular-nums text-slate-900">
+                    {alarmWhenLabel(alarm)}
+                  </span>
                   <span className="min-w-0 flex-1 truncate text-sm text-slate-700">{alarm.title}</span>
-                  <span className="text-xs text-slate-400">{alarm.repeat === 'daily' ? '매일' : '일회'}</span>
+                  <span className="text-xs text-slate-400">{alarmRepeatLabel(alarm)}</span>
                   {alarm.snoozeUntil && alarm.snoozeUntil > Date.now() ? (
                     <span className="text-xs text-amber-600">스누즈 중</span>
                   ) : null}

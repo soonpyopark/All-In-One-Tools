@@ -1,9 +1,7 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
-import { Notification } from 'electron';
-import { APP_NAME } from '../../shared/constants.js';
-import { showMainWindow } from '../trayService.js';
+import { closeAlarmOverlay, showAlarmOverlay } from './alarmOverlay.js';
 import { getSoundPath, listAlarms, patchAlarm, saveAlarms } from './store.js';
 
 /**
@@ -137,21 +135,12 @@ function playSound(filePath) {
 function fireRing(event) {
   ringing = event;
   playSound();
+  // OS 우측 하단 토스트 대신, 화면 인식처럼 모니터 가운데 큰 오버레이를 띄움
   try {
-    if (Notification.isSupported()) {
-      const note = new Notification({
-        title: event.kind === 'timer' ? `${APP_NAME} · 타이머` : `${APP_NAME} · 알람`,
-        body: event.title || (event.kind === 'timer' ? '시간이 되었습니다.' : '알람'),
-      });
-      note.on('click', () => {
-        showMainWindow();
-      });
-      note.show();
-    }
+    showAlarmOverlay(event);
   } catch {
-    // 알림 실패해도 상태·소리는 유지
+    // 오버레이 실패해도 소리·ringing 상태는 유지
   }
-  showMainWindow();
 }
 
 function pad(n) {
@@ -182,18 +171,25 @@ async function checkAlarms() {
         current = { ...current, snoozeUntil: null, lastFiredKey: fireKey };
         changed = true;
         fireRing({ kind: 'alarm', id: current.id, title: current.title, firedAt: ms });
-        if (current.repeat === 'once') {
+        if (current.repeat === 'once' || current.repeat === 'date') {
           current = { ...current, enabled: false };
         }
       }
     } else if (current.enabled && !current.snoozeUntil && current.time === hhmm) {
-      const fireKey = `${dayKey}:${current.time}`;
-      if (current.lastFiredKey !== fireKey) {
-        current = { ...current, lastFiredKey: fireKey };
-        changed = true;
-        fireRing({ kind: 'alarm', id: current.id, title: current.title, firedAt: ms });
-        if (current.repeat === 'once') {
-          current = { ...current, enabled: false };
+      const dateOk =
+        current.repeat !== 'date' || (current.date != null && current.date === dayKey);
+      if (dateOk) {
+        const fireKey =
+          current.repeat === 'date'
+            ? `date:${current.date}:${current.time}`
+            : `${dayKey}:${current.time}`;
+        if (current.lastFiredKey !== fireKey) {
+          current = { ...current, lastFiredKey: fireKey };
+          changed = true;
+          fireRing({ kind: 'alarm', id: current.id, title: current.title, firedAt: ms });
+          if (current.repeat === 'once' || current.repeat === 'date') {
+            current = { ...current, enabled: false };
+          }
         }
       }
     }
@@ -308,6 +304,7 @@ export function getRinging() {
 export function dismissRinging() {
   stopSound();
   ringing = null;
+  closeAlarmOverlay();
   return { ok: true };
 }
 
@@ -319,6 +316,7 @@ export async function snoozeRinging(minutes = 5) {
   stopSound();
   if (!current || current.kind !== 'alarm') {
     ringing = null;
+    closeAlarmOverlay();
     return { ok: true, ringing: null };
   }
   const mins = Math.max(1, Math.min(60, Math.floor(minutes)));
@@ -328,6 +326,7 @@ export async function snoozeRinging(minutes = 5) {
     snoozeUntil: Date.now() + mins * 60_000,
   }));
   ringing = null;
+  closeAlarmOverlay();
   return { ok: true };
 }
 

@@ -943,7 +943,7 @@
           const glyph = document.createElement('span');
           glyph.className = 'glyph';
           glyph.style.background = glyphBackground(item);
-          if (item.iconImage) {
+          if (item.useFileIcon !== false && item.iconImage) {
             glyph.classList.add('has-file-icon');
             const img = document.createElement('img');
             img.src = item.iconImage;

@@ -25,6 +25,7 @@ const DEFAULTS_VERSION = 1;
  *   icon: string,
  *   group: LauncherGroup,
  *   color: string,
+ *   useFileIcon?: boolean,
  * }} LauncherItem
  */
 
@@ -91,8 +92,10 @@ function normalizeItem(raw) {
   const color = isLauncherColorId(src.color)
     ? normalizeLauncherColorId(src.color)
     : launcherColorIdFromItemId(id);
+  // 기본은 OS 파일 아이콘. 사용자가 이모지를 고르면 false 로 저장한다.
+  const useFileIcon = src.useFileIcon !== false;
 
-  return { id, type, title, target, icon, group, color };
+  return { id, type, title, target, icon, group, color, useFileIcon };
 }
 
 /** @param {LauncherItemType} type @param {string} target */

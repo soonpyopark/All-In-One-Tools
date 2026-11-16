@@ -124,6 +124,7 @@ function buildMsi(unpackedDir, suffix) {
     '-d', `StageDir=${stage}`,
     '-d', `InstallerDir=${path.join(projectRoot, 'installer')}`,
     '-ext', 'WixToolset.UI.wixext',
+    '-ext', 'WixToolset.Util.wixext',
     '-o', outPath,
   ];
   log(`> wix ${args.join(' ')}`);

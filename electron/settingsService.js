@@ -1,4 +1,8 @@
 import fs from 'node:fs';
+import {
+  normalizeFeatureFavorites,
+  normalizeFeatureOrder,
+} from '../shared/featureOrder.js';
 import { DEFAULT_ACCENT_COLOR, normalizeAccentColor } from '../shared/theme.js';
 import { statePath } from './context.js';
 import { readJsonSync, withFileLock, writeJsonSync } from './jsonStore.js';
@@ -16,6 +20,7 @@ const SETTINGS_FILE = 'settings.json';
  *   exportDir: string,
  *   folders: Record<string, string>,
  *   featureOrder: string[],
+ *   featureFavorites: string[],
  * }} AppSettings
  */
 
@@ -31,27 +36,8 @@ function defaultSettings() {
     exportDir: '',
     folders: {},
     featureOrder: [],
+    featureFavorites: [],
   };
-}
-
-/**
- * 홈·사이드바 메뉴 id 순서. `home` 은 저장하지 않는다.
- * @param {unknown} raw
- * @returns {string[]}
- */
-function normalizeFeatureOrder(raw) {
-  if (!Array.isArray(raw)) return [];
-  /** @type {string[]} */
-  const out = [];
-  const seen = new Set();
-  for (const item of raw) {
-    const id = String(item ?? '').trim();
-    if (!id || id === 'home' || seen.has(id) || !/^[A-Za-z0-9-]{1,64}$/.test(id)) continue;
-    seen.add(id);
-    out.push(id);
-    if (out.length >= 64) break;
-  }
-  return out;
 }
 
 /** Keys of the remembered folders (see `rememberFolder`). */
@@ -93,6 +79,7 @@ function normalizeSettings(raw) {
     exportDir: typeof src.exportDir === 'string' ? src.exportDir.trim() : base.exportDir,
     folders: normalizeFolders(src.folders),
     featureOrder: normalizeFeatureOrder(src.featureOrder),
+    featureFavorites: normalizeFeatureFavorites(src.featureFavorites),
   };
 }
 
