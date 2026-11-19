@@ -16,6 +16,8 @@
 | `npm run dev:stop` | 이 프로젝트의 Electron 프로세스를 모두 종료 |
 | `npm run build:release` | Windows MSI + portable zip → `release/` |
 | `npm run build:release:mac` | macOS dmg → `release/` (macOS 에서만 실행 가능) |
+| `npm run version:bump` | 배포 버전 +1 (`APP_VERSION` `1.0.1.N`, `package.json` `1.0.1-N`). 옵션: `--set=1.1.0.0` `--sync` |
+| `npm run publish:release` | 태그·GitHub Release 게시 + 이전 릴리스/태그 정리 (`--notes-file=` 또는 `--notes=`) |
 | `npm run update:all` | npm 의존성(`@latest`, 메이저 포함) + Electron + OCR 모델(upstream 해시 바뀌면 핀 갱신) 최신화 (`update_all.bat` 으로도 실행) |
 | `npm run build:update_all` | 최신화 + `build:release` (Windows) |
 | `npm run build:update_all:mac` | 최신화 + `build:release:mac` (macOS) |
@@ -32,7 +34,7 @@
 - `electron/devRenderer.js` — 개발 시 화면을 `.dev-dist/` 로 감시 빌드 (운영은 `dist/` 를 파일로 로드)
 - `electron/api/coreApi.js` — 기본 API (앱 정보, 설정, 업데이트 확인)
 - `electron/modules/*` — 기능별 API (변환, 이미지 자르기·PDF 저장·PDF 정리, OCR 변환(PDF & 이미지), QR 코드 생성기, 매크로 & 화면 캡처, 파일명 일괄 변경, Windows 시스템 관리)
-- Windows 시스템 관리: Windows 빌드에서만 메뉴에 표시. 제어판·컴퓨터관리·서비스·작업 스케줄러 바로가기(DnD 순서), 화면보호기 끄기 토글, 로컬 계정 비밀번호 변경.
+- Windows 시스템 관리: Windows 빌드에서만 메뉴에 표시. 제어판·컴퓨터관리·서비스·작업 스케줄러 바로가기(DnD 순서), 화면보호기 끄기 토글, 로컬 계정 비밀번호 변경, BitLocker 잠금·해제(관리자 권한).
 - QR 코드 생성기: Tiny QRcode Generator 와 같이 보내기(텍스트·URL → 단색 QR, 긴 텍스트 QRT1 압축) / 받기(화면 영역 드래그 → QR 인식)를 지원한다.
 - OCR 변환(PDF & 이미지): Tiny PDF Editor 와 같은 PP-OCRv5 ONNX(`electron/ocr/`)로 검색 가능 글자 층을 붙인다. 이미지는 PDF 로 변환한 뒤 OCR 한다. 기본 한국어·영어, 다른 언어는 옵션(모델 다운로드). 모델은 `ocr/models/` (`npm run prepare:ocr`).
 - 파일명 일괄 변경: 이름 변환은 화면(`src/features/rename/ops.js`)에서 미리보기로 만들고, 실제 변경은 `rename.apply`(`electron/modules/rename.js`)가 전부 검증한 뒤 임시 이름을 거쳐 적용한다. 마지막 적용은 "실행 취소"로 되돌릴 수 있다.

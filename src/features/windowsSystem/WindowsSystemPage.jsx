@@ -92,7 +92,13 @@ export default function WindowsSystemPage() {
     setBitlockerError(null);
     try {
       const res = await api('windowsSystem.bitlocker.list');
+      if (typeof res?.elevated === 'boolean') setElevated(res.elevated);
       setBitlockerVolumes(Array.isArray(res?.volumes) ? res.volumes : []);
+      if (res?.needsAdmin) {
+        setBitlockerError(
+          'BitLocker 작업에 관리자 권한이 필요합니다. 앱을 관리자로 다시 실행해 주세요.',
+        );
+      }
     } catch (err) {
       setBitlockerVolumes([]);
       setBitlockerError(

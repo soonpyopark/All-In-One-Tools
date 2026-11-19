@@ -26,6 +26,15 @@ const LAUNCH_TARGETS = {
   schedule: 'taskschd.msc',
 };
 
+/** 64비트 System32 PowerShell (WOW64 회피) */
+const POWERSHELL_EXE = path.join(
+  process.env.SystemRoot || 'C:\\Windows',
+  'System32',
+  'WindowsPowerShell',
+  'v1.0',
+  'powershell.exe',
+);
+
 /**
  * @param {string} command
  * @param {string[]} [args]
@@ -78,7 +87,7 @@ function runCommand(command, args = [], options = {}) {
 async function runPowerShell(script, options = {}) {
   const encoded = Buffer.from(script, 'utf16le').toString('base64');
   const result = await runCommand(
-    'powershell.exe',
+    POWERSHELL_EXE,
     ['-NoProfile', '-NonInteractive', '-ExecutionPolicy', 'Bypass', '-EncodedCommand', encoded],
     { timeoutMs: options.timeoutMs ?? 30_000, windowsHide: true },
   );
@@ -102,8 +111,27 @@ function spawnDetachedTarget(target) {
   child.unref();
 }
 
-/** 현재 프로세스가 관리자 권한인지 */
+/**
+ * 현재 프로세스가 UAC Elevated(High Integrity) 인지.
+ * 관리자 그룹 소속(IsInRole)만으로는 부족 — 필터된 토큰에서도 true 가 나올 수 있음.
+ */
 async function isProcessElevated() {
+  try {
+    // S-1-16-12288 = Mandatory Label\High Mandatory Level
+    const out = await runPowerShell(
+      `
+$high = $false
+foreach ($g in [Security.Principal.WindowsIdentity]::GetCurrent().Groups) {
+  if ($g.Value -eq 'S-1-16-12288') { $high = $true; break }
+}
+if ($high) { 'True' } else { 'False' }
+`,
+      { timeoutMs: 10_000 },
+    );
+    if (/^(True|true|1)$/.test(String(out).trim())) return true;
+  } catch {
+    // fall through
+  }
   try {
     const result = await runCommand('net', ['session'], { timeoutMs: 8_000, windowsHide: true });
     return result.code === 0;
@@ -124,49 +152,66 @@ async function relaunchElevated() {
   const exe = process.execPath;
   const cwd = app.isPackaged ? path.dirname(exe) : process.cwd();
   const args = process.argv.slice(1).filter((arg) => arg && arg !== '--');
+  // ProcessStartInfo.Arguments 는 하나의 문자열
+  const argString = args
+    .map((arg) => {
+      const text = String(arg);
+      if (!/[\s"]/u.test(text)) return text;
+      return `"${text.replace(/"/g, '\\"')}"`;
+    })
+    .join(' ');
 
-  const argListLiteral =
-    args.length > 0 ? `@(${args.map((a) => JSON.stringify(a)).join(', ')})` : '@()';
-  const innerCmd = [
-    'Start-Sleep -Milliseconds 1200',
-    `$exe = ${JSON.stringify(exe)}`,
-    `$cwd = ${JSON.stringify(cwd)}`,
-    `$argList = ${argListLiteral}`,
-    'Set-Location -LiteralPath $cwd',
-    'if ($argList.Count -gt 0) {',
-    '  Start-Process -FilePath $exe -WorkingDirectory $cwd -ArgumentList $argList',
-    '} else {',
-    '  Start-Process -FilePath $exe -WorkingDirectory $cwd',
-    '}',
-  ].join('; ');
+  // 트레이 단일 인스턴스 잠금을 먼저 풀어, 관리자 프로세스가 바로 뜰 수 있게 함
+  markQuitting();
+  try {
+    app.releaseSingleInstanceLock();
+  } catch {
+    // ignore
+  }
 
   try {
-    // UAC 승인 후 잠시 대기 → 현재 인스턴스가 잠금·종료할 시간을 준 뒤 관리자 프로세스를 기동
+    // ProcessStartInfo + Verb=runas (경로 공백·중첩 -Command 이스케이프 문제 회피)
     await runPowerShell(
       `
 $ErrorActionPreference = 'Stop'
-Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList @(
-  '-NoProfile',
-  '-ExecutionPolicy', 'Bypass',
-  '-Command', ${JSON.stringify(innerCmd)}
-) | Out-Null
+$psi = New-Object System.Diagnostics.ProcessStartInfo
+$psi.FileName = ${JSON.stringify(exe)}
+$psi.WorkingDirectory = ${JSON.stringify(cwd)}
+$psi.Arguments = ${JSON.stringify(argString)}
+$psi.UseShellExecute = $true
+$psi.Verb = 'runas'
+$proc = [System.Diagnostics.Process]::Start($psi)
+if (-not $proc) { throw 'UAC 실행이 시작되지 않았습니다.' }
 `,
       { timeoutMs: 180_000 },
     );
   } catch (err) {
+    try {
+      app.requestSingleInstanceLock();
+    } catch {
+      // ignore
+    }
+    if (err instanceof ApiError) {
+      const message = err.message;
+      if (/cancel|취소|denied|거부|The operation was canceled|1223|0x80004005/i.test(message)) {
+        throw new ApiError('관리자 권한 요청이 취소되었습니다.');
+      }
+      if (/ParserError|UnexpectedToken|#<\s*CLIXML/i.test(message)) {
+        throw new ApiError('관리자 권한으로 다시 실행하지 못했습니다. UAC 창에서 허용해 주세요.');
+      }
+      throw new ApiError(
+        /관리자 권한/.test(message)
+          ? message
+          : '관리자 권한으로 다시 실행하지 못했습니다. UAC 창에서 허용해 주세요.',
+      );
+    }
     const message = err instanceof Error ? err.message : String(err);
-    if (/cancel|취소|denied|거부|The operation was canceled/i.test(message)) {
+    if (/cancel|취소|The operation was canceled/i.test(message)) {
       throw new ApiError('관리자 권한 요청이 취소되었습니다.');
     }
     throw new ApiError('관리자 권한으로 다시 실행하지 못했습니다. UAC 창에서 허용해 주세요.');
   }
 
-  markQuitting();
-  try {
-    app.releaseSingleInstanceLock();
-  } catch {
-    // 트레이 단일 인스턴스가 아닐 수 있음
-  }
   setImmediate(() => {
     app.quit();
   });
@@ -327,6 +372,13 @@ function normalizeMountPoint(raw) {
 const BITLOCKER_ADMIN_MSG =
   'BitLocker 작업에 관리자 권한이 필요합니다. 앱을 관리자로 다시 실행해 주세요.';
 
+/** 실제 권한 거부인지 (네임스페이스 이름만 나온 경우는 제외) */
+function isBitLockerPermissionDenied(message) {
+  return /Access is denied|액세스가 거부|PermissionDenied|0x80070005|0x80041003|WBEM_E_ACCESS_DENIED|UnauthorizedAccess|Run as administrator/i.test(
+    message,
+  );
+}
+
 /** 이미 사용자용으로 다듬은 BitLocker ApiError 인지 */
 function isMappedBitLockerError(err) {
   return (
@@ -343,33 +395,61 @@ function isMappedBitLockerError(err) {
  * PowerShell/BitLocker 오류를 짧은 한글 메시지로 바꿉니다.
  * @param {unknown} err
  * @param {'list' | 'unlock' | 'lock'} kind
+ * @param {{ elevated?: boolean }} [options]
  * @returns {never}
  */
-function mapBitLockerError(err, kind) {
+function mapBitLockerError(err, kind, options = {}) {
   const message = err instanceof Error ? err.message : String(err);
-  // PermissionDenied / WBEM 0x80041003 / CLIXML 권한 오류 포함
+  const elevated = Boolean(options.elevated);
+
+  // 잠금: 사용 중 판별을 권한 오류보다 먼저 (Access denied 가 사용 중일 때도 자주 나옴)
   if (
-    /Access is denied|액세스가 거부|PermissionDenied|0x80070005|0x80041003|WBEM_E_ACCESS_DENIED|Unauthorized|관리자|elevation|elevated|Run as administrator|MicrosoftVolumeEncryption/i.test(
+    kind === 'lock' &&
+    /in use|사용 중|cannot.*lock|잠글 수 없|ForceDismount|파일이 사용|being used|The device is not ready|장치가 준비되지|0x80070015|0x8031004E/i.test(
       message,
     )
   ) {
-    throw new ApiError(BITLOCKER_ADMIN_MSG, 403, { code: 'BITLOCKER_ADMIN' });
-  }
-  if (kind === 'unlock' && /password|암호|incorrect|올바르지|0x803100A2|FVE_E_FAILED_AUTHENTICATION/i.test(message)) {
-    throw new ApiError('BitLocker 암호가 올바르지 않습니다.');
-  }
-  if (kind === 'lock' && /in use|사용 중|cannot.*lock|잠글 수 없|ForceDismount|파일이 사용|being used/i.test(message)) {
     throw new ApiError(
       '드라이브가 사용 중이라 잠글 수 없습니다. 파일을 닫거나 강제 잠금을 선택해 주세요.',
       409,
       { code: 'BITLOCKER_IN_USE' },
     );
   }
-  if (/Get-BitLockerVolume|BitLocker.*not|cmdlet.*not found|모듈/i.test(message) && !/#<\s*CLIXML/i.test(message)) {
-    throw new ApiError('이 PC에서 BitLocker 명령을 사용할 수 없습니다.');
+  if (kind === 'unlock' && /password|암호|incorrect|올바르지|0x803100A2|FVE_E_FAILED_AUTHENTICATION/i.test(message)) {
+    throw new ApiError('BitLocker 암호가 올바르지 않습니다.');
+  }
+  if (isBitLockerPermissionDenied(message)) {
+    // 이미 elevated 인데 잠금이 거부되면 → 사용 중으로 유도 (관리자 재실행 오안내 방지)
+    if (elevated && kind === 'lock') {
+      throw new ApiError(
+        '드라이브가 사용 중이라 잠글 수 없습니다. 파일을 닫거나 강제 잠금을 선택해 주세요.',
+        409,
+        { code: 'BITLOCKER_IN_USE' },
+      );
+    }
+    if (elevated) {
+      throw new ApiError(
+        kind === 'list' ? 'BitLocker 볼륨을 조회하지 못했습니다.' : 'BitLocker 작업에 실패했습니다.',
+      );
+    }
+    throw new ApiError(BITLOCKER_ADMIN_MSG, 403, { code: 'BITLOCKER_ADMIN' });
+  }
+  if (
+    /cmdlet.*not found|not recognized|모듈을 찾을 수 없|BitLocker.*not available|Get-BitLockerVolume.*not/i.test(
+      message,
+    )
+  ) {
+    throw new ApiError('이 PC에서 BitLocker 명령을 사용할 수 없습니다. (Pro 이상·BitLocker 기능 필요)');
   }
   // CLIXML·긴 원문은 사용자에게 그대로 보여 주지 않음
   if (/#<\s*CLIXML|<Objs |<S N=/.test(message)) {
+    if (kind === 'lock') {
+      throw new ApiError(
+        '드라이브가 사용 중이라 잠글 수 없습니다. 파일을 닫거나 강제 잠금을 선택해 주세요.',
+        409,
+        { code: 'BITLOCKER_IN_USE' },
+      );
+    }
     throw new ApiError(
       kind === 'list' ? 'BitLocker 볼륨을 조회하지 못했습니다.' : 'BitLocker 작업에 실패했습니다.',
     );
@@ -383,7 +463,14 @@ function mapBitLockerError(err, kind) {
         !/^At |^CategoryInfo|^FullyQualifiedErrorId|^PowerShell|^#</i.test(line) &&
         line.length < 200,
     );
-  throw new ApiError(short || (kind === 'list' ? 'BitLocker 볼륨을 조회하지 못했습니다.' : 'BitLocker 작업에 실패했습니다.'));
+  throw new ApiError(
+    short ||
+      (kind === 'list'
+        ? 'BitLocker 볼륨을 조회하지 못했습니다.'
+        : kind === 'lock'
+          ? '드라이브를 잠그지 못했습니다.'
+          : 'BitLocker 작업에 실패했습니다.'),
+  );
 }
 
 /**
@@ -398,10 +485,17 @@ function mapBitLockerError(err, kind) {
  * }> }>}
  */
 async function listBitLockerVolumes() {
+  const elevated = await isProcessElevated();
+  // 비관리자면 CIM 호출 전에 바로 안내 (CLIXML 원문·오탐 방지)
+  if (!elevated) {
+    return { volumes: [], elevated: false, needsAdmin: true };
+  }
+
   try {
     const out = await runPowerShell(
       `
 $ErrorActionPreference = 'Stop'
+Import-Module BitLocker -ErrorAction Stop
 $vols = @(Get-BitLockerVolume -ErrorAction Stop)
 $items = @()
 foreach ($v in $vols) {
@@ -455,10 +549,15 @@ if ($items.Count -eq 0) { '[]' } else { ($items | ConvertTo-Json -Compress -Dept
       })
       .filter(Boolean);
     volumes.sort((a, b) => a.mountPoint.localeCompare(b.mountPoint));
-    return { volumes };
+    return { volumes, elevated: true, needsAdmin: false };
   } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    // High IL 오탐·토큰 불일치 시: 예외 대신 관리자 재실행 안내
+    if (isBitLockerPermissionDenied(message)) {
+      return { volumes: [], elevated: false, needsAdmin: true };
+    }
     if (isMappedBitLockerError(err)) throw err;
-    mapBitLockerError(err, 'list');
+    mapBitLockerError(err, 'list', { elevated: true });
   }
 }
 
@@ -472,12 +571,16 @@ async function unlockBitLockerVolume(mountPoint, password) {
   if (!pass) throw new ApiError('BitLocker 암호를 입력해 주세요.');
   if (pass.length > 256) throw new ApiError('암호가 너무 깁니다.');
 
+  const elevated = await isProcessElevated();
+  if (!elevated) throw new ApiError(BITLOCKER_ADMIN_MSG, 403, { code: 'BITLOCKER_ADMIN' });
+
   const mpLit = JSON.stringify(mp);
   const passLit = JSON.stringify(pass);
   try {
     await runPowerShell(
       `
 $ErrorActionPreference = 'Stop'
+Import-Module BitLocker -ErrorAction Stop
 $mp = ${mpLit}
 $plain = ${passLit}
 $secure = ConvertTo-SecureString -String $plain -AsPlainText -Force
@@ -488,7 +591,7 @@ Unlock-BitLocker -MountPoint $mp -Password $secure | Out-Null
     return { ok: true, mountPoint: mp };
   } catch (err) {
     if (isMappedBitLockerError(err)) throw err;
-    mapBitLockerError(err, 'unlock');
+    mapBitLockerError(err, 'unlock', { elevated: true });
   }
 }
 
@@ -498,18 +601,30 @@ Unlock-BitLocker -MountPoint $mp -Password $secure | Out-Null
  */
 async function lockBitLockerVolume(mountPoint, force) {
   const mp = normalizeMountPoint(mountPoint);
-  const args = ['-lock', mp];
-  if (force) args.push('-ForceDismount');
+  const elevated = await isProcessElevated();
+  if (!elevated) throw new ApiError(BITLOCKER_ADMIN_MSG, 403, { code: 'BITLOCKER_ADMIN' });
+
+  const mpLit = JSON.stringify(mp);
   try {
-    const result = await runCommand('manage-bde.exe', args, { timeoutMs: 60_000, windowsHide: true });
-    const detail = `${result.stdout || ''}\n${result.stderr || ''}`.trim();
-    if (result.code !== 0) {
-      mapBitLockerError(new ApiError(detail || '드라이브를 잠그지 못했습니다.'), 'lock');
-    }
+    // 목록·해제와 동일하게 BitLocker 모듈 사용 (manage-bde PATH/WOW64 이슈 회피)
+    await runPowerShell(
+      `
+$ErrorActionPreference = 'Stop'
+Import-Module BitLocker -ErrorAction Stop
+$mp = ${mpLit}
+$force = ${force ? '$true' : '$false'}
+if ($force) {
+  Lock-BitLocker -MountPoint $mp -ForceDismount | Out-Null
+} else {
+  Lock-BitLocker -MountPoint $mp | Out-Null
+}
+`,
+      { timeoutMs: 60_000 },
+    );
     return { ok: true, mountPoint: mp };
   } catch (err) {
     if (isMappedBitLockerError(err)) throw err;
-    mapBitLockerError(err, 'lock');
+    mapBitLockerError(err, 'lock', { elevated: true });
   }
 }
 

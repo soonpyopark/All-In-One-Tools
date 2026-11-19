@@ -1,7 +1,7 @@
 {
   "name": "all-tools",
   "productName": "AllTools",
-  "version": "1.0.1-10",
+  "version": "1.0.2-0",
   "description": "All-Tools: Electron app with video-to-GIF conversion and extensible tools.",
   "main": "main.js",
   "type": "module",
@@ -15,6 +15,8 @@
     "build": "npm run prepare:icons && npm run prepare:ocr && vite build",
     "build:release": "node scripts/build-release.mjs",
     "build:release:mac": "node scripts/build-release-mac.mjs",
+    "version:bump": "node scripts/bump-version.mjs",
+    "publish:release": "node scripts/publish-release.mjs",
     "update:all": "node scripts/update-all.mjs",
     "build:update_all": "update_all.bat _inner && npm run build:release",
     "build:update_all:mac": "node scripts/update-all.mjs && npm run build:release:mac",
