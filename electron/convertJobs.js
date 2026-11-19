@@ -443,9 +443,3 @@ export function cancelConvertBatch(batchId) {
   return getConvertBatch(batchId);
 }
 
-export function listConvertJobs() {
-  return [...jobs.values()]
-    .sort((a, b) => b.createdAt - a.createdAt)
-    .slice(0, 40)
-    .map(publicJob);
-}

@@ -349,5 +349,3 @@ export function getClockStatus() {
     serverNow: Date.now(),
   };
 }
-
-export { playSound, stopSound };

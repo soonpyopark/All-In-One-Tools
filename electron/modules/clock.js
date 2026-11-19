@@ -9,7 +9,6 @@ import { ApiError, defineApi } from '../api/registry.js';
 import {
   dismissRinging,
   getClockStatus,
-  getTimerState,
   pauseTimer,
   previewSound,
   resetTimer,
@@ -154,8 +153,6 @@ export function register() {
     return { ok: true, mode, count: alarms.length, alarms };
   });
 
-  defineApi('clock.timer.get', () => ({ timer: getTimerState() }));
-
   defineApi('clock.timer.start', (body) => {
     const seconds = Number(body?.seconds);
     if (!Number.isFinite(seconds) || seconds < 1) {
@@ -176,8 +173,6 @@ export function register() {
     const minutes = Number(body?.minutes ?? 5);
     return snoozeRinging(Number.isFinite(minutes) ? minutes : 5);
   });
-
-  defineApi('clock.sound.get', () => ({ soundPath: getSoundPath() }));
 
   defineApi('clock.sound.pick', async () => {
     const win = appMainWindow();

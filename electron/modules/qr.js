@@ -11,7 +11,7 @@ import { captureRegion } from '../capture/screenCapture.js';
 import { pickRegion } from '../capture/regionPicker.js';
 import { APP_NAME } from '../../shared/constants.js';
 import { decodeQrFromNativeImage } from '../qr/decode.js';
-import { hideQrFullscreen, showQrFullscreen } from '../qr/fullscreen.js';
+import { showQrFullscreen } from '../qr/fullscreen.js';
 import { buildTextQr } from '../qr/generate.js';
 
 function stamp() {
@@ -121,11 +121,6 @@ export function register() {
     const dataUrl = String(body?.dataUrl ?? '');
     if (!dataUrl.startsWith('data:image/')) throw new ApiError('표시할 QR 이미지가 없습니다.');
     showQrFullscreen(dataUrl, Number(body?.canvasModules) || 29);
-    return { ok: true };
-  });
-
-  defineApi('qr.hideFullscreen', () => {
-    hideQrFullscreen();
     return { ok: true };
   });
 

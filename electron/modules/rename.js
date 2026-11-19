@@ -190,29 +190,6 @@ export function register() {
     return { files, skipped, truncated };
   });
 
-  /** 폴더 안 파일 목록 (옵션: 하위 폴더 포함), 자연 정렬. */
-  defineApi('rename.listFolder', (body) => {
-    const dir = path.resolve(String(body?.dirPath ?? '').trim());
-    try {
-      if (!fs.statSync(dir).isDirectory()) throw new Error('not a directory');
-    } catch {
-      throw new ApiError(`폴더를 열 수 없습니다.\n${dir}`);
-    }
-    const { files, truncated } = collectFiles(dir, body?.recursive === true);
-    const collator = new Intl.Collator('ko', { numeric: true, sensitivity: 'base' });
-    files.sort((a, b) => collator.compare(a, b));
-    const infos = [];
-    for (const file of files) {
-      try {
-        const info = fileInfo(file);
-        if (info) infos.push(info);
-      } catch {
-        /* 읽을 수 없는 파일은 건너뜁니다 */
-      }
-    }
-    return { dir, files: infos, truncated };
-  });
-
   /**
    * 이름 변경·이동을 실제로 적용합니다.
    * 모두 검증한 뒤, 이름이 서로 맞바뀌는 경우도 안전하도록 임시 이름을 거쳐 옮깁니다.

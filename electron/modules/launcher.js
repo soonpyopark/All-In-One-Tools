@@ -9,10 +9,6 @@ import { APP_NAME } from '../../shared/constants.js';
 import { ApiError, defineApi } from '../api/registry.js';
 import {
   broadcastLauncherItemsChanged,
-  editItemFromFloating,
-  focusMainFromFloating,
-  hideFloatingLauncher,
-  removeItemFromFloating,
   resetFloatingPosition,
   setFloatingCollapsed,
   showFloatingLauncher,
@@ -112,15 +108,7 @@ export function register() {
     }
     return showFloatingLauncher();
   });
-  defineApi('launcher.floating.hide', () => hideFloatingLauncher());
-  defineApi('launcher.floating.focusMain', () => focusMainFromFloating());
   defineApi('launcher.floating.resetPosition', () => resetFloatingPosition());
-  defineApi('launcher.floating.edit', (body) => editItemFromFloating(String(body?.id ?? '')));
-  defineApi('launcher.floating.remove', async (body) => {
-    const id = String(body?.id ?? '').trim();
-    if (!id) throw new ApiError('삭제할 항목이 없습니다.');
-    return removeItemFromFloating(id);
-  });
 
   /**
    * 경로·URL 목록을 바로가기로 추가합니다.

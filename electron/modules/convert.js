@@ -5,13 +5,12 @@ import {
   getConvertBatch,
   getConvertJob,
   getExportDirInfo,
-  listConvertJobs,
   resolveExportDir,
   startConvertJobs,
 } from '../convertJobs.js';
 import { listConverters } from '../converters/registry.js';
 import { estimateGifSizeBatch } from '../gifSizeEstimate.js';
-import { probeFfmpeg, probeMediaFile } from '../ffmpegService.js';
+import { probeFfmpeg } from '../ffmpegService.js';
 import { getSettings, updateSettings } from '../settingsService.js';
 
 export function register() {
@@ -19,18 +18,6 @@ export function register() {
     const dir =
       typeof body?.ffmpegDir === 'string' ? body.ffmpegDir.trim() : getSettings().ffmpegDir;
     return probeFfmpeg(dir);
-  });
-
-  defineApi('convert.probeMedia', async (body) => {
-    const raw = Array.isArray(body?.paths) ? body.paths : body?.path ? [body.path] : [];
-    const paths = [...new Set(raw.map((p) => String(p ?? '').trim()).filter(Boolean))];
-    if (paths.length === 0) return { items: [] };
-    if (paths.length > 50) throw new ApiError('한 번에 최대 50개까지 조회할 수 있습니다.');
-    const items = [];
-    for (const p of paths) {
-      items.push(await probeMediaFile(p));
-    }
-    return { items };
   });
 
   /** Short sample encode → extrapolate full GIF size (more accurate than formula). */
@@ -106,8 +93,4 @@ export function register() {
     if (!job) throw new ApiError('변환 작업을 찾을 수 없습니다.', 404);
     return { job, jobs: [job], batch: getConvertBatch(job.batchId) };
   });
-
-  defineApi('convert.listJobs', () => ({
-    jobs: listConvertJobs(),
-  }));
 }

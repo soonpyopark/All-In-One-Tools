@@ -338,14 +338,6 @@ function registerIpc() {
     }
   });
 
-  handleTrusted('frame:getInfo', () => ({
-    platform: process.platform,
-    arch: process.arch,
-    stateRoot: storage.stateRoot,
-    portable: storage.portable,
-    isDev,
-  }));
-
   handleTrusted('frame:openExternal', (_event, url) => {
     openExternalSafe(String(url ?? ''));
   });

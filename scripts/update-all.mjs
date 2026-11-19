@@ -3,9 +3,10 @@
  * npm run update:all — 의존성(npm)과 Electron 을 최신으로 올립니다. (NAS4USB 의 update-all 과 같은 방식)
  *
  * 순서: 개발 앱 중지 → git pull(변경 사항이 없을 때만) → npm install/update →
- *       직접 의존성 전부 @latest(메이저 포함) → Electron 실행 확인 → 아이콘 준비 → (옵션) 빌드
+ *       직접 의존성 전부 @latest(메이저 포함) → Electron 실행 확인 →
+ *       OCR 모델 upstream 확인(해시 바뀌면 파일·핀 갱신) → 아이콘 준비 → (옵션) 빌드
  *
- * 옵션: --skip-git  --skip-npm  --skip-majors  --build  --build-mac
+ * 옵션: --skip-git  --skip-npm  --skip-ocr  --skip-majors  --build  --build-mac
  */
 import { spawnSync } from 'node:child_process';
 import fs from 'node:fs/promises';
@@ -20,6 +21,7 @@ function parseArgs(argv) {
   return {
     skipGit: argv.includes('--skip-git'),
     skipNpm: argv.includes('--skip-npm'),
+    skipOcr: argv.includes('--skip-ocr'),
     skipMajors: argv.includes('--skip-majors'),
     build: argv.includes('--build'),
     buildMac: argv.includes('--build-mac'),
@@ -314,6 +316,14 @@ async function main() {
 
   if (!opts.skipNpm) {
     await updateNpmStack({ skipMajors: opts.skipMajors });
+  }
+
+  if (!opts.skipOcr) {
+    // HuggingFace PP-OCRv5 ONNX: 원격 해시가 핀과 다르면 ocr/models + sha 핀을 함께 갱신.
+    run('OCR 모델 upstream 확인', 'node', [
+      path.join(root, 'scripts', 'ensure-ocr-models.mjs'),
+      '--update',
+    ]);
   }
 
   run('prepare icons', 'npm', ['run', 'prepare:icons']);

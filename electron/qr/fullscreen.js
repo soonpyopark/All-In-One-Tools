@@ -69,6 +69,3 @@ export function showQrFullscreen(dataUrl, canvasModules) {
   void win.loadFile(path.join(here, 'fullscreen.html'));
 }
 
-export function hideQrFullscreen() {
-  closeFullscreen();
-}

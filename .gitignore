@@ -5,11 +5,10 @@ dist/
 .dev-userdata/
 release/
 
-# Runtime data (settings, members, backups) — never commit
+# Runtime data (settings, launcher, alarms, …) — never commit
 data/
 .env
 .env.*
-!.env.example
 
 *.log
 .DS_Store

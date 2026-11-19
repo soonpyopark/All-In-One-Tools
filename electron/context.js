@@ -26,7 +26,7 @@ export function getAppContext() {
   return context;
 }
 
-/** Folder holding every mutable file (settings, members, backups, …). */
+/** 설정·런처·알람 등 가변 데이터가 들어가는 폴더. */
 export function getStateRoot() {
   return getAppContext().stateRoot;
 }

@@ -80,14 +80,6 @@ export function maxBuildStamp(names) {
   return best;
 }
 
-/** YYMMDD_HHMMSS → epoch ms (assume 20xx). */
-export function buildStampToMs(stamp) {
-  const match = /^(\d{2})(\d{2})(\d{2})_(\d{2})(\d{2})(\d{2})$/.exec(String(stamp).trim());
-  if (!match) return null;
-  const ms = Date.UTC(2000 + Number(match[1]), Number(match[2]) - 1, Number(match[3]), Number(match[4]), Number(match[5]), Number(match[6]));
-  return Number.isFinite(ms) ? ms : null;
-}
-
 /**
  * @param {UpdateCheckResult} result
  * @returns {'version' | 'build' | null}

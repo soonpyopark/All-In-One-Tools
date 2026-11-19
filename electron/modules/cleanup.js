@@ -1,5 +1,3 @@
-import fs from 'node:fs';
-import path from 'node:path';
 import { ApiError, defineApi } from '../api/registry.js';
 import { cancelCleanupJob, getCleanupJob, startCleanupJob } from '../cleanup/jobs.js';
 import { EBOOK_INPUT_EXTS, previewEbookRegion } from '../cleanup/ebookExtract.js';
@@ -23,27 +21,6 @@ export function register() {
       },
     ],
   }));
-
-  /** Files of the given types directly inside a folder (not recursive), in natural order. */
-  defineApi('cleanup.listFolder', (body) => {
-    const dir = path.resolve(String(body?.dirPath ?? '').trim());
-    const exts = new Set(
-      (Array.isArray(body?.exts) ? body.exts : []).map((ext) => String(ext).toLowerCase()),
-    );
-    let entries;
-    try {
-      entries = fs.readdirSync(dir, { withFileTypes: true });
-    } catch {
-      throw new ApiError(`폴더를 열 수 없습니다.\n${dir}`);
-    }
-    const collator = new Intl.Collator('ko', { numeric: true, sensitivity: 'base' });
-    const files = entries
-      .filter((entry) => entry.isFile() && exts.has(path.extname(entry.name).toLowerCase()))
-      .map((entry) => entry.name)
-      .sort((a, b) => collator.compare(a, b))
-      .map((name) => path.join(dir, name));
-    return { dir, files };
-  });
 
   /** First image (downscaled) + the automatically detected book region, for the region preview. */
   defineApi('cleanup.ebookPreview', async (body) => {

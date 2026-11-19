@@ -1,6 +1,5 @@
 /**
- * App-wide constants shared by the Electron main process, the build scripts
- * and the renderer. Rebrand a new app from this file first.
+ * 앱 전역 상수 (Electron 메인·빌드 스크립트·렌더러 공용).
  */
 
 /** Display name (UI, window title). */
@@ -24,7 +23,7 @@ export const APP_FILE_NAME = 'AllTools';
  * - Git 태그·GitHub Release: `v1.0.1-N`  (하이픈) ← `APP_GIT_TAG`
  * - `package.json` version: `1.0.1-N`  (electron-builder semver)
  */
-export const APP_VERSION = '1.0.1.9';
+export const APP_VERSION = '1.0.1.10';
 
 /**
  * Git 태그 문자열. `1.0.1.5` → `v1.0.1-5`
@@ -59,7 +58,6 @@ export const UPDATE_REPO = 'soonpyopark/All-In-One-Tools';
  * @see https://github.com/soonpyopark/Tiny-PDF-Editor
  */
 export const TINY_PDF_EDITOR_URL = 'https://github.com/soonpyopark/Tiny-PDF-Editor';
-export const TINY_PDF_EDITOR_RELEASES_URL = `${TINY_PDF_EDITOR_URL}/releases`;
 
 /** 출장 경로 찾기 (Path Finder) — 런처 기본 바로가기용. */
 export const PATH_FINDER_URL = 'https://pathfinder-eight-pearl.vercel.app/';

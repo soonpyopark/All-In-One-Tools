@@ -1,10 +1,14 @@
 /**
- * Windows 시스템 관리 — 제어판·컴퓨터관리·서비스·작업 스케줄러, 화면보호기, 비밀번호 변경.
+ * Windows 시스템 관리 — 제어판·컴퓨터관리·서비스·작업 스케줄러,
+ * 화면보호기, 비밀번호 변경, BitLocker 잠금·해제, 관리자 권한으로 재실행.
  * win32 에서만 API 를 등록합니다.
  */
 import { spawn } from 'node:child_process';
 import os from 'node:os';
+import path from 'node:path';
+import { app } from 'electron';
 import { ApiError, defineApi } from '../api/registry.js';
+import { markQuitting } from '../trayService.js';
 import {
   readWindowsSystemState,
   saveWindowsSystemOrder,
@@ -96,6 +100,77 @@ function spawnDetachedTarget(target) {
     windowsHide: true,
   });
   child.unref();
+}
+
+/** 현재 프로세스가 관리자 권한인지 */
+async function isProcessElevated() {
+  try {
+    const result = await runCommand('net', ['session'], { timeoutMs: 8_000, windowsHide: true });
+    return result.code === 0;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * UAC로 동일 앱을 관리자 권한으로 다시 띄운 뒤 현재 프로세스를 종료합니다.
+ * UAC를 취소하면 현재 앱은 그대로 둡니다.
+ */
+async function relaunchElevated() {
+  if (await isProcessElevated()) {
+    return { ok: true, elevated: true, already: true };
+  }
+
+  const exe = process.execPath;
+  const cwd = app.isPackaged ? path.dirname(exe) : process.cwd();
+  const args = process.argv.slice(1).filter((arg) => arg && arg !== '--');
+
+  const argListLiteral =
+    args.length > 0 ? `@(${args.map((a) => JSON.stringify(a)).join(', ')})` : '@()';
+  const innerCmd = [
+    'Start-Sleep -Milliseconds 1200',
+    `$exe = ${JSON.stringify(exe)}`,
+    `$cwd = ${JSON.stringify(cwd)}`,
+    `$argList = ${argListLiteral}`,
+    'Set-Location -LiteralPath $cwd',
+    'if ($argList.Count -gt 0) {',
+    '  Start-Process -FilePath $exe -WorkingDirectory $cwd -ArgumentList $argList',
+    '} else {',
+    '  Start-Process -FilePath $exe -WorkingDirectory $cwd',
+    '}',
+  ].join('; ');
+
+  try {
+    // UAC 승인 후 잠시 대기 → 현재 인스턴스가 잠금·종료할 시간을 준 뒤 관리자 프로세스를 기동
+    await runPowerShell(
+      `
+$ErrorActionPreference = 'Stop'
+Start-Process -FilePath 'powershell.exe' -Verb RunAs -ArgumentList @(
+  '-NoProfile',
+  '-ExecutionPolicy', 'Bypass',
+  '-Command', ${JSON.stringify(innerCmd)}
+) | Out-Null
+`,
+      { timeoutMs: 180_000 },
+    );
+  } catch (err) {
+    const message = err instanceof Error ? err.message : String(err);
+    if (/cancel|취소|denied|거부|The operation was canceled/i.test(message)) {
+      throw new ApiError('관리자 권한 요청이 취소되었습니다.');
+    }
+    throw new ApiError('관리자 권한으로 다시 실행하지 못했습니다. UAC 창에서 허용해 주세요.');
+  }
+
+  markQuitting();
+  try {
+    app.releaseSingleInstanceLock();
+  } catch {
+    // 트레이 단일 인스턴스가 아닐 수 있음
+  }
+  setImmediate(() => {
+    app.quit();
+  });
+  return { ok: true, elevated: true, already: false };
 }
 
 /**
@@ -235,19 +310,226 @@ try {
   }
 }
 
+/**
+ * @param {string} raw
+ * @returns {string} 예: `E:`
+ */
+function normalizeMountPoint(raw) {
+  const text = String(raw ?? '')
+    .trim()
+    .toUpperCase()
+    .replace(/\//g, '\\');
+  const m = /^([A-Z]):\\?$/.exec(text);
+  if (!m) throw new ApiError('드라이브 문자가 올바르지 않습니다. (예: E:)');
+  return `${m[1]}:`;
+}
+
+const BITLOCKER_ADMIN_MSG =
+  'BitLocker 작업에 관리자 권한이 필요합니다. 앱을 관리자로 다시 실행해 주세요.';
+
+/** 이미 사용자용으로 다듬은 BitLocker ApiError 인지 */
+function isMappedBitLockerError(err) {
+  return (
+    err instanceof ApiError &&
+    (Boolean(err.extra?.code) ||
+      err.message === BITLOCKER_ADMIN_MSG ||
+      err.message.startsWith('BitLocker ') ||
+      err.message.startsWith('드라이브가 사용 중') ||
+      err.message.startsWith('이 PC에서 BitLocker'))
+  );
+}
+
+/**
+ * PowerShell/BitLocker 오류를 짧은 한글 메시지로 바꿉니다.
+ * @param {unknown} err
+ * @param {'list' | 'unlock' | 'lock'} kind
+ * @returns {never}
+ */
+function mapBitLockerError(err, kind) {
+  const message = err instanceof Error ? err.message : String(err);
+  // PermissionDenied / WBEM 0x80041003 / CLIXML 권한 오류 포함
+  if (
+    /Access is denied|액세스가 거부|PermissionDenied|0x80070005|0x80041003|WBEM_E_ACCESS_DENIED|Unauthorized|관리자|elevation|elevated|Run as administrator|MicrosoftVolumeEncryption/i.test(
+      message,
+    )
+  ) {
+    throw new ApiError(BITLOCKER_ADMIN_MSG, 403, { code: 'BITLOCKER_ADMIN' });
+  }
+  if (kind === 'unlock' && /password|암호|incorrect|올바르지|0x803100A2|FVE_E_FAILED_AUTHENTICATION/i.test(message)) {
+    throw new ApiError('BitLocker 암호가 올바르지 않습니다.');
+  }
+  if (kind === 'lock' && /in use|사용 중|cannot.*lock|잠글 수 없|ForceDismount|파일이 사용|being used/i.test(message)) {
+    throw new ApiError(
+      '드라이브가 사용 중이라 잠글 수 없습니다. 파일을 닫거나 강제 잠금을 선택해 주세요.',
+      409,
+      { code: 'BITLOCKER_IN_USE' },
+    );
+  }
+  if (/Get-BitLockerVolume|BitLocker.*not|cmdlet.*not found|모듈/i.test(message) && !/#<\s*CLIXML/i.test(message)) {
+    throw new ApiError('이 PC에서 BitLocker 명령을 사용할 수 없습니다.');
+  }
+  // CLIXML·긴 원문은 사용자에게 그대로 보여 주지 않음
+  if (/#<\s*CLIXML|<Objs |<S N=/.test(message)) {
+    throw new ApiError(
+      kind === 'list' ? 'BitLocker 볼륨을 조회하지 못했습니다.' : 'BitLocker 작업에 실패했습니다.',
+    );
+  }
+  const short = message
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .find(
+      (line) =>
+        line &&
+        !/^At |^CategoryInfo|^FullyQualifiedErrorId|^PowerShell|^#</i.test(line) &&
+        line.length < 200,
+    );
+  throw new ApiError(short || (kind === 'list' ? 'BitLocker 볼륨을 조회하지 못했습니다.' : 'BitLocker 작업에 실패했습니다.'));
+}
+
+/**
+ * BitLocker로 보호 중이거나 잠긴 볼륨만 반환합니다.
+ * @returns {Promise<{ volumes: Array<{
+ *   mountPoint: string,
+ *   lockStatus: string,
+ *   protectionStatus: string,
+ *   volumeStatus: string,
+ *   capacityGB: number,
+ *   locked: boolean,
+ * }> }>}
+ */
+async function listBitLockerVolumes() {
+  try {
+    const out = await runPowerShell(
+      `
+$ErrorActionPreference = 'Stop'
+$vols = @(Get-BitLockerVolume -ErrorAction Stop)
+$items = @()
+foreach ($v in $vols) {
+  $lock = [string]$v.LockStatus
+  $prot = [string]$v.ProtectionStatus
+  $status = [string]$v.VolumeStatus
+  $include = ($lock -eq 'Locked') -or ($prot -eq 'On') -or ($status -ne 'FullyDecrypted')
+  if (-not $include) { continue }
+  $cap = 0
+  try { $cap = [math]::Round([double]$v.CapacityGB, 1) } catch { $cap = 0 }
+  $items += [PSCustomObject]@{
+    mountPoint = ([string]$v.MountPoint).TrimEnd('\\')
+    lockStatus = $lock
+    protectionStatus = $prot
+    volumeStatus = $status
+    capacityGB = $cap
+  }
+}
+if ($items.Count -eq 0) { '[]' } else { ($items | ConvertTo-Json -Compress -Depth 3) }
+`,
+      { timeoutMs: 45_000 },
+    );
+    const text = String(out || '').trim() || '[]';
+    /** @type {unknown} */
+    let parsed;
+    try {
+      parsed = JSON.parse(text);
+    } catch {
+      parsed = [];
+    }
+    const rows = Array.isArray(parsed) ? parsed : parsed ? [parsed] : [];
+    const volumes = rows
+      .map((row) => {
+        if (!row || typeof row !== 'object') return null;
+        const src = /** @type {Record<string, unknown>} */ (row);
+        let mountPoint;
+        try {
+          mountPoint = normalizeMountPoint(String(src.mountPoint ?? ''));
+        } catch {
+          return null;
+        }
+        const lockStatus = String(src.lockStatus ?? '');
+        return {
+          mountPoint,
+          lockStatus,
+          protectionStatus: String(src.protectionStatus ?? ''),
+          volumeStatus: String(src.volumeStatus ?? ''),
+          capacityGB: Number(src.capacityGB) || 0,
+          locked: /^locked$/i.test(lockStatus),
+        };
+      })
+      .filter(Boolean);
+    volumes.sort((a, b) => a.mountPoint.localeCompare(b.mountPoint));
+    return { volumes };
+  } catch (err) {
+    if (isMappedBitLockerError(err)) throw err;
+    mapBitLockerError(err, 'list');
+  }
+}
+
+/**
+ * @param {string} mountPoint
+ * @param {string} password
+ */
+async function unlockBitLockerVolume(mountPoint, password) {
+  const mp = normalizeMountPoint(mountPoint);
+  const pass = String(password ?? '');
+  if (!pass) throw new ApiError('BitLocker 암호를 입력해 주세요.');
+  if (pass.length > 256) throw new ApiError('암호가 너무 깁니다.');
+
+  const mpLit = JSON.stringify(mp);
+  const passLit = JSON.stringify(pass);
+  try {
+    await runPowerShell(
+      `
+$ErrorActionPreference = 'Stop'
+$mp = ${mpLit}
+$plain = ${passLit}
+$secure = ConvertTo-SecureString -String $plain -AsPlainText -Force
+Unlock-BitLocker -MountPoint $mp -Password $secure | Out-Null
+`,
+      { timeoutMs: 60_000 },
+    );
+    return { ok: true, mountPoint: mp };
+  } catch (err) {
+    if (isMappedBitLockerError(err)) throw err;
+    mapBitLockerError(err, 'unlock');
+  }
+}
+
+/**
+ * @param {string} mountPoint
+ * @param {boolean} force
+ */
+async function lockBitLockerVolume(mountPoint, force) {
+  const mp = normalizeMountPoint(mountPoint);
+  const args = ['-lock', mp];
+  if (force) args.push('-ForceDismount');
+  try {
+    const result = await runCommand('manage-bde.exe', args, { timeoutMs: 60_000, windowsHide: true });
+    const detail = `${result.stdout || ''}\n${result.stderr || ''}`.trim();
+    if (result.code !== 0) {
+      mapBitLockerError(new ApiError(detail || '드라이브를 잠그지 못했습니다.'), 'lock');
+    }
+    return { ok: true, mountPoint: mp };
+  } catch (err) {
+    if (isMappedBitLockerError(err)) throw err;
+    mapBitLockerError(err, 'lock');
+  }
+}
+
 export function register() {
   if (process.platform !== 'win32') return;
 
   defineApi('windowsSystem.state', async () => {
     const { order } = readWindowsSystemState();
     const screensaverActive = await getScreensaverActive();
+    const elevated = await isProcessElevated();
     return {
       order,
       shortcuts: orderWindowsSystemShortcuts(order),
       screensaverActive,
       username: os.userInfo().username || process.env.USERNAME || '',
+      elevated,
     };
   });
+
+  defineApi('windowsSystem.relaunchElevated', async () => relaunchElevated());
 
   defineApi('windowsSystem.saveOrder', async (body) => {
     const saved = await saveWindowsSystemOrder(body?.order);
@@ -272,10 +554,6 @@ export function register() {
     }
   });
 
-  defineApi('windowsSystem.getScreensaver', async () => ({
-    active: await getScreensaverActive(),
-  }));
-
   defineApi('windowsSystem.setScreensaver', async (body) => {
     const active = Boolean(body?.active);
     await setScreensaverActive(active);
@@ -291,5 +569,19 @@ export function register() {
     if (next !== confirm) throw new ApiError('비밀번호 확인이 일치하지 않습니다.');
     await changeLocalPassword(current, next);
     return { ok: true };
+  });
+
+  defineApi('windowsSystem.bitlocker.list', async () => listBitLockerVolumes());
+
+  defineApi('windowsSystem.bitlocker.unlock', async (body) => {
+    const mountPoint = String(body?.mountPoint ?? '');
+    const password = String(body?.password ?? '');
+    return unlockBitLockerVolume(mountPoint, password);
+  });
+
+  defineApi('windowsSystem.bitlocker.lock', async (body) => {
+    const mountPoint = String(body?.mountPoint ?? '');
+    const force = Boolean(body?.force);
+    return lockBitLockerVolume(mountPoint, force);
   });
 }

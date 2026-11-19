@@ -9,7 +9,6 @@ import { runStartupUpdateCheck } from '../../lib/updateCheckUi.js';
 import SettingsView from '../settings/SettingsView.jsx';
 import TopBar from './TopBar.jsx';
 
-const SIDEBAR_COLLAPSED_KEY = 'frame.sidebarCollapsed';
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
 let startupChecked = false;
@@ -26,15 +25,6 @@ function formatSidebarClock(date) {
 /** @param {Date} date */
 function formatSidebarDay(date) {
   return `${date.getMonth() + 1}월 ${date.getDate()}일 (${WEEKDAYS[date.getDay()]})`;
-}
-
-/** @param {boolean} collapsed */
-function writeSidebarCollapsed(collapsed) {
-  try {
-    window.localStorage.setItem(SIDEBAR_COLLAPSED_KEY, collapsed ? '1' : '0');
-  } catch {
-    // 저장 실패해도 이번 세션 토글은 유지
-  }
 }
 
 const floatingButtonClass =
@@ -140,11 +130,7 @@ function AppShellInner() {
   }, []);
 
   const toggleSidebar = () => {
-    setSidebarCollapsed((prev) => {
-      const next = !prev;
-      writeSidebarCollapsed(next);
-      return next;
-    });
+    setSidebarCollapsed((prev) => !prev);
   };
 
   useEffect(() => {

@@ -8,7 +8,7 @@ import {
   inputClass,
 } from '../../components/settings/ui.jsx';
 import { useDialog } from '../../context/DialogContext.jsx';
-import { api } from '../../lib/apiClient.js';
+import { ApiRequestError, api } from '../../lib/apiClient.js';
 import {
   WINDOWS_SYSTEM_SHORTCUTS,
   orderWindowsSystemShortcuts,
@@ -37,7 +37,19 @@ function EyeIcon({ open }) {
 }
 
 /**
- * Windows 전용: 제어판·컴퓨터관리·서비스·작업 스케줄러 바로가기, 화면보호기 끄기, 비밀번호 변경.
+ * @typedef {{
+ *   mountPoint: string,
+ *   lockStatus: string,
+ *   protectionStatus: string,
+ *   volumeStatus: string,
+ *   capacityGB: number,
+ *   locked: boolean,
+ * }} BitLockerVolume
+ */
+
+/**
+ * Windows 전용: 제어판·컴퓨터관리·서비스·작업 스케줄러 바로가기,
+ * 화면보호기 끄기, BitLocker 잠금·해제, 비밀번호 변경.
  */
 export default function WindowsSystemPage() {
   const dialog = useDialog();
@@ -53,6 +65,14 @@ export default function WindowsSystemPage() {
   const [loading, setLoading] = useState(true);
   const [savingScreen, setSavingScreen] = useState(false);
   const [savingPassword, setSavingPassword] = useState(false);
+  const [elevated, setElevated] = useState(false);
+  const [relaunchingElevated, setRelaunchingElevated] = useState(false);
+  const [bitlockerVolumes, setBitlockerVolumes] = useState(/** @type {BitLockerVolume[]} */ ([]));
+  const [bitlockerLoading, setBitlockerLoading] = useState(false);
+  const [bitlockerBusy, setBitlockerBusy] = useState(/** @type {string | null} */ (null));
+  const [bitlockerPasswords, setBitlockerPasswords] = useState(/** @type {Record<string, string>} */ ({}));
+  const [bitlockerShowPass, setBitlockerShowPass] = useState(/** @type {Record<string, boolean>} */ ({}));
+  const [bitlockerError, setBitlockerError] = useState(/** @type {string | null} */ (null));
 
   const dragIdRef = useRef(/** @type {string | null} */ (null));
   const didDragRef = useRef(false);
@@ -64,6 +84,23 @@ export default function WindowsSystemPage() {
     setShortcuts(orderWindowsSystemShortcuts(state?.order));
     setScreensaverOff(state?.screensaverActive === false);
     setUsername(String(state?.username ?? ''));
+    setElevated(Boolean(state?.elevated));
+  }, []);
+
+  const refreshBitlocker = useCallback(async () => {
+    setBitlockerLoading(true);
+    setBitlockerError(null);
+    try {
+      const res = await api('windowsSystem.bitlocker.list');
+      setBitlockerVolumes(Array.isArray(res?.volumes) ? res.volumes : []);
+    } catch (err) {
+      setBitlockerVolumes([]);
+      setBitlockerError(
+        err instanceof Error ? err.message : 'BitLocker 볼륨을 불러오지 못했습니다.',
+      );
+    } finally {
+      setBitlockerLoading(false);
+    }
   }, []);
 
   useEffect(() => {
@@ -80,10 +117,126 @@ export default function WindowsSystemPage() {
       .finally(() => {
         if (alive) setLoading(false);
       });
+    void refreshBitlocker();
     return () => {
       alive = false;
     };
-  }, [dialog, refresh]);
+  }, [dialog, refresh, refreshBitlocker]);
+
+  const setBitlockerPassword = (mountPoint, value) => {
+    setBitlockerPasswords((prev) => ({ ...prev, [mountPoint]: value }));
+  };
+
+  const clearBitlockerPassword = (mountPoint) => {
+    setBitlockerPasswords((prev) => {
+      const next = { ...prev };
+      delete next[mountPoint];
+      return next;
+    });
+    setBitlockerShowPass((prev) => {
+      const next = { ...prev };
+      delete next[mountPoint];
+      return next;
+    });
+  };
+
+  const onUnlockBitlocker = async (mountPoint) => {
+    const pass = String(bitlockerPasswords[mountPoint] ?? '');
+    if (!pass) {
+      void dialog.alert({ title: 'BitLocker', body: '암호를 입력해 주세요.' });
+      return;
+    }
+    setBitlockerBusy(mountPoint);
+    try {
+      await api('windowsSystem.bitlocker.unlock', { mountPoint, password: pass });
+      clearBitlockerPassword(mountPoint);
+      await refreshBitlocker();
+      void dialog.alert({ title: 'BitLocker', body: `${mountPoint} 잠금을 해제했습니다.` });
+    } catch (err) {
+      void dialog.alert({
+        title: 'BitLocker',
+        body: err instanceof Error ? err.message : '잠금 해제에 실패했습니다.',
+      });
+    } finally {
+      setBitlockerBusy(null);
+    }
+  };
+
+  const runLockBitlocker = async (mountPoint, force) => {
+    setBitlockerBusy(mountPoint);
+    try {
+      await api('windowsSystem.bitlocker.lock', { mountPoint, force });
+      await refreshBitlocker();
+      void dialog.alert({
+        title: 'BitLocker',
+        body: force ? `${mountPoint} 을(를) 강제 잠금했습니다.` : `${mountPoint} 을(를) 잠갔습니다.`,
+      });
+      return true;
+    } catch (err) {
+      const inUse =
+        err instanceof ApiRequestError &&
+        (err.data?.code === 'BITLOCKER_IN_USE' || /사용 중/.test(err.message));
+      if (!force && inUse) {
+        const ok = await dialog.confirm({
+          title: 'BitLocker 강제 잠금',
+          body: `${mountPoint} 이(가) 사용 중이라 잠글 수 없습니다. 연결을 끊고 강제 잠금할까요? 열려 있는 파일은 저장되지 않을 수 있습니다.`,
+          confirmLabel: '강제 잠금',
+          cancelLabel: '취소',
+          confirmVariant: 'danger',
+        });
+        if (ok) return runLockBitlocker(mountPoint, true);
+        return false;
+      }
+      void dialog.alert({
+        title: 'BitLocker',
+        body: err instanceof Error ? err.message : '잠금에 실패했습니다.',
+      });
+      return false;
+    } finally {
+      setBitlockerBusy(null);
+    }
+  };
+
+  const onLockBitlocker = async (mountPoint) => {
+    const ok = await dialog.confirm({
+      title: 'BitLocker 잠금',
+      body: `${mountPoint} 드라이브를 다시 잠글까요? (복호화하지 않고 잠금만 합니다.)`,
+      confirmLabel: '잠그기',
+      cancelLabel: '취소',
+    });
+    if (!ok) return;
+    await runLockBitlocker(mountPoint, false);
+  };
+
+  const onRelaunchElevated = async () => {
+    if (elevated) {
+      void dialog.alert({ title: 'BitLocker', body: '이미 관리자 권한으로 실행 중입니다.' });
+      return;
+    }
+    const ok = await dialog.confirm({
+      title: '관리자 권한으로 다시 실행',
+      body: 'UAC 창이 뜨면 허용해 주세요. 허용되면 현재 창을 닫고 관리자 권한으로 앱을 다시 시작합니다.',
+      confirmLabel: '다시 실행',
+      cancelLabel: '취소',
+    });
+    if (!ok) return;
+    setRelaunchingElevated(true);
+    try {
+      const res = await api('windowsSystem.relaunchElevated');
+      if (res?.already) {
+        setElevated(true);
+        void dialog.alert({ title: 'BitLocker', body: '이미 관리자 권한으로 실행 중입니다.' });
+      }
+      // 성공 시 곧 앱이 종료됨
+    } catch (err) {
+      void dialog.alert({
+        title: '관리자 권한으로 다시 실행',
+        body: err instanceof Error ? err.message : '다시 실행에 실패했습니다.',
+      });
+    } finally {
+      setRelaunchingElevated(false);
+    }
+  };
 
   const persistOrder = async (nextList) => {
     const order = nextList.map((item) => item.id);
@@ -405,6 +558,142 @@ export default function WindowsSystemPage() {
               </button>
             </div>
           </div>
+        </Section>
+
+        <Section
+          title="BitLocker"
+          description="BitLocker로 보호된 드라이브를 암호로 잠금 해제하거나, manage-bde로 다시 잠급니다. 복호화는 하지 않습니다. 관리자 권한이 필요할 수 있습니다."
+        >
+          <div className="mb-3 flex flex-wrap items-center gap-2">
+            <button
+              type="button"
+              className={btnClass}
+              disabled={bitlockerLoading || Boolean(bitlockerBusy) || relaunchingElevated}
+              onClick={() => void refreshBitlocker()}
+            >
+              {bitlockerLoading ? '불러오는 중…' : '새로고침'}
+            </button>
+            {elevated ? (
+              <span className="inline-flex items-center rounded-full bg-emerald-50 px-2.5 py-1 text-xs font-medium text-emerald-800">
+                관리자 권한으로 실행 중
+              </span>
+            ) : (
+              <button
+                type="button"
+                className={btnPrimaryClass}
+                disabled={relaunchingElevated || Boolean(bitlockerBusy)}
+                onClick={() => void onRelaunchElevated()}
+              >
+                {relaunchingElevated ? '요청 중…' : '관리자 권한으로 다시 실행'}
+              </button>
+            )}
+          </div>
+          {bitlockerLoading && bitlockerVolumes.length === 0 ? (
+            <p className="m-0 text-sm text-slate-400">볼륨을 불러오는 중…</p>
+          ) : bitlockerError ? (
+            <p className="m-0 text-sm text-amber-800">{bitlockerError}</p>
+          ) : bitlockerVolumes.length === 0 ? (
+            <p className="m-0 text-sm text-slate-500">
+              BitLocker로 보호 중이거나 잠긴 드라이브가 없습니다.
+            </p>
+          ) : (
+            <ul className="m-0 list-none space-y-3 p-0">
+              {bitlockerVolumes.map((vol) => {
+                const busy = bitlockerBusy === vol.mountPoint;
+                const showPass = Boolean(bitlockerShowPass[vol.mountPoint]);
+                const passValue = bitlockerPasswords[vol.mountPoint] ?? '';
+                return (
+                  <li
+                    key={vol.mountPoint}
+                    className="rounded-xl border border-slate-200 bg-white px-4 py-3 shadow-sm"
+                  >
+                    <div className="flex flex-wrap items-start justify-between gap-3">
+                      <div>
+                        <p className="m-0 text-sm font-semibold text-slate-900">
+                          {vol.mountPoint}
+                          <span
+                            className={`ml-2 inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                              vol.locked
+                                ? 'bg-amber-50 text-amber-800'
+                                : 'bg-emerald-50 text-emerald-800'
+                            }`}
+                          >
+                            {vol.locked ? '잠김' : '열림'}
+                          </span>
+                        </p>
+                        <p className="mt-1 m-0 text-xs text-slate-500">
+                          {vol.capacityGB > 0 ? `${vol.capacityGB} GB` : '용량 미확인'}
+                          {vol.volumeStatus ? ` · ${vol.volumeStatus}` : ''}
+                          {vol.protectionStatus ? ` · 보호 ${vol.protectionStatus}` : ''}
+                        </p>
+                      </div>
+                      {!vol.locked ? (
+                        <button
+                          type="button"
+                          className={btnPrimaryClass}
+                          disabled={busy || bitlockerLoading}
+                          onClick={() => void onLockBitlocker(vol.mountPoint)}
+                        >
+                          {busy ? '처리 중…' : '잠그기'}
+                        </button>
+                      ) : null}
+                    </div>
+                    {vol.locked ? (
+                      <div className="mt-3 flex max-w-md flex-wrap items-end gap-2">
+                        <div className="min-w-[12rem] flex-1">
+                          <Field label="BitLocker 암호">
+                            <div className="relative">
+                              <input
+                                type={showPass ? 'text' : 'password'}
+                                className={`${inputClass} pr-10`}
+                                autoComplete="off"
+                                value={passValue}
+                                disabled={busy}
+                                onChange={(event) =>
+                                  setBitlockerPassword(vol.mountPoint, event.target.value)
+                                }
+                                onKeyDown={(event) => {
+                                  if (event.key === 'Enter') {
+                                    event.preventDefault();
+                                    void onUnlockBitlocker(vol.mountPoint);
+                                  }
+                                }}
+                                placeholder="암호 입력"
+                              />
+                              <button
+                                type="button"
+                                className="absolute inset-y-0 right-0 flex items-center px-3 text-slate-400 transition hover:text-slate-600"
+                                title={showPass ? '암호 숨기기' : '암호 보기'}
+                                aria-label={showPass ? '암호 숨기기' : '암호 보기'}
+                                aria-pressed={showPass}
+                                disabled={busy}
+                                onClick={() =>
+                                  setBitlockerShowPass((prev) => ({
+                                    ...prev,
+                                    [vol.mountPoint]: !prev[vol.mountPoint],
+                                  }))
+                                }
+                              >
+                                <EyeIcon open={showPass} />
+                              </button>
+                            </div>
+                          </Field>
+                        </div>
+                        <button
+                          type="button"
+                          className={btnPrimaryClass}
+                          disabled={busy || !passValue}
+                          onClick={() => void onUnlockBitlocker(vol.mountPoint)}
+                        >
+                          {busy ? '해제 중…' : '잠금 해제'}
+                        </button>
+                      </div>
+                    ) : null}
+                  </li>
+                );
+              })}
+            </ul>
+          )}
         </Section>
       </div>
     </div>

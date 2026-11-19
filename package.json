@@ -1,7 +1,7 @@
 {
   "name": "all-tools",
   "productName": "AllTools",
-  "version": "1.0.1-9",
+  "version": "1.0.1-10",
   "description": "All-Tools: Electron app with video-to-GIF conversion and extensible tools.",
   "main": "main.js",
   "type": "module",
@@ -23,9 +23,7 @@
   },
   "keywords": [
     "electron",
-    "react",
-    "frame",
-    "boilerplate"
+    "react"
   ],
   "license": "AGPL-3.0",
   "devDependencies": {
@@ -35,7 +33,6 @@
     "electron-builder": "^26.18.0",
     "png-to-ico": "^3.0.2",
     "postcss": "^8.5.32",
-    "rcedit": "^5.0.2",
     "tailwindcss": "^4.3.5",
     "vite": "^8.3.8"
   },
