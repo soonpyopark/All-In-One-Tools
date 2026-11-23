@@ -12,8 +12,11 @@ contextBridge.exposeInMainWorld('frame', {
   pickDirectory: (options) => ipcRenderer.invoke('frame:pickDirectory', options),
   pickOpenFiles: (options) => ipcRenderer.invoke('frame:pickOpenFiles', options),
   showItemInFolder: (targetPath) => ipcRenderer.invoke('frame:showItemInFolder', targetPath),
+  openPath: (targetPath) => ipcRenderer.invoke('frame:openPath', targetPath),
   getAlwaysOnTop: () => ipcRenderer.invoke('frame:getAlwaysOnTop'),
   setAlwaysOnTop: (enabled) => ipcRenderer.invoke('frame:setAlwaysOnTop', enabled),
+  /** 메인 창을 최초 실행 크기(1280×800)로 되돌립니다. */
+  resetWindowSize: () => ipcRenderer.invoke('frame:resetWindowSize'),
   /**
    * 플로팅 런처에서 편집 요청이 오면 콜백 호출.
    * @param {(payload: { id: string }) => void} handler

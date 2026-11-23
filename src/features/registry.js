@@ -28,6 +28,9 @@ import HomePage from './home/HomePage.jsx';
 import LauncherPage from './launcher/LauncherPage.jsx';
 import OcrPage from './ocr/OcrPage.jsx';
 import PdfCompressPage from './pdfCompress/PdfCompressPage.jsx';
+import ExcelComparePage from './excelCompare/ExcelComparePage.jsx';
+import ExcelMergePage from './excelMerge/ExcelMergePage.jsx';
+import HwpMergePage from './hwpMerge/HwpMergePage.jsx';
 import QrPage from './qr/QrPage.jsx';
 import RenamePage from './rename/RenamePage.jsx';
 import SubnetPage from './subnet/SubnetPage.jsx';
@@ -35,7 +38,14 @@ import WindowsSystemPage from './windowsSystem/WindowsSystemPage.jsx';
 
 /** @type {FeatureDefinition[]} */
 export const FEATURES = [
-  { id: 'home', label: '홈', icon: '🏠', component: HomePage },
+  {
+    id: 'home',
+    label: '홈',
+    icon: '🏠',
+    description: '메뉴 바로가기와 즐겨찾기로 기능을 고릅니다.',
+    color: ['#38bdf8', '#0284c7'],
+    component: HomePage,
+  },
   {
     id: 'launcher',
     label: '런처',
@@ -72,7 +82,7 @@ export const FEATURES = [
     id: 'pdf-compress',
     label: 'PDF 용량 줄이기',
     icon: '🗜️',
-    description: 'Tiny PDF Editor 와 같이 텍스트·검색은 유지하고 이미지 위주로 PDF 용량을 줄입니다.',
+    description: '텍스트·검색은 유지하고 이미지 위주로 PDF 용량을 줄입니다.',
     color: ['#fbbf24', '#d97706'],
     component: PdfCompressPage,
   },
@@ -83,6 +93,33 @@ export const FEATURES = [
     description: 'PDF 에서 비슷한 페이지를 찾아 제거합니다. (연속 / 문서 전체)',
     color: ['#2dd4bf', '#0f9488'],
     component: PdfDedupPage,
+  },
+  {
+    id: 'excel-compare',
+    label: '엑셀(Excel) 비교',
+    icon: '📊',
+    description:
+      '두 Excel의 지정 컬럼을 비교해 일치/불일치 행을 색으로 표시한 결과 파일을 만듭니다.',
+    color: ['#34d399', '#059669'],
+    component: ExcelComparePage,
+  },
+  {
+    id: 'excel-merge',
+    label: '엑셀 문서 병합',
+    icon: '📗',
+    description:
+      '여러 Excel 파일을 시트로 모으거나, 하나의 시트에 아래로 이어 붙여 .xlsx 로 저장합니다.',
+    color: ['#4ade80', '#16a34a'],
+    component: ExcelMergePage,
+  },
+  {
+    id: 'hwp-merge',
+    label: '한글 문서 병합',
+    icon: '📑',
+    description: 'HWP·HWPX를 순서대로 하나의 한글 문서로 합칩니다. 용지 방향(세로/가로)은 문서별로 유지됩니다. (Windows · 한컴 한글 필요)',
+    color: ['#38bdf8', '#0369a1'],
+    platforms: ['win32'],
+    component: HwpMergePage,
   },
   {
     id: 'rename',

@@ -454,7 +454,10 @@ export default function WindowsSystemPage() {
           )}
         </Section>
 
-        <Section title="화면보호기 설정 끄기" description="켜면 화면보호기가 동작하지 않습니다. 다시 끄면 이전처럼 사용할 수 있습니다.">
+        <Section
+          title="화면보호기 설정 끄기"
+          description="클래식 화면보호기만 끕니다. 디스플레이 끄기·절전·자동 잠금과는 별개입니다. 켜면 화면보호기가 동작하지 않고, 다시 끄면 이전처럼 사용할 수 있습니다."
+        >
           <ToggleRow
             label="화면보호기 끄기"
             hint={screensaverOff ? '화면보호기가 꺼져 있습니다.' : '화면보호기가 켜져 있을 수 있습니다.'}

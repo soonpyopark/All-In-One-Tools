@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { api, getNative } from '../../lib/apiClient.js';
+import { previewAttachedFile } from '../../lib/openLocalFile.js';
 import { useDialog } from '../../context/DialogContext.jsx';
 import { invalidNameReason, splitName } from '../../../shared/renameRules.js';
 import {
@@ -1158,7 +1159,14 @@ export default function RenamePage() {
                             : 'text-slate-800 hover:bg-slate-50'
                         }`}
                       >
-                        <td className="truncate px-3 py-1.5" title={item.origName}>
+                        <td
+                          className="truncate px-3 py-1.5"
+                          title={`${item.origName}\n더블클릭하면 연결된 프로그램으로 엽니다`}
+                          onDoubleClick={(event) => {
+                            event.stopPropagation();
+                            previewAttachedFile(item.path, dialog);
+                          }}
+                        >
                           <span className="inline-flex max-w-full items-center gap-2">
                             <ExtBadge ext={item.ext} />
                             <span className="truncate">{item.origName}</span>

@@ -73,6 +73,7 @@ export function registerCoreApi() {
     if ('exportDir' in body) patch.exportDir = typeof body.exportDir === 'string' ? body.exportDir.trim() : '';
     if ('featureOrder' in body) patch.featureOrder = body.featureOrder;
     if ('featureFavorites' in body) patch.featureFavorites = body.featureFavorites;
+    if ('clockHour12' in body) patch.clockHour12 = Boolean(body.clockHour12);
     if ('autoLaunch' in body && runtime.autoLaunch?.supported) {
       runtime.autoLaunch.set(Boolean(body.autoLaunch));
     }

@@ -11,9 +11,9 @@ import {
 } from '../../components/settings/ui.jsx';
 import { useDialog } from '../../context/DialogContext.jsx';
 import { api, getNative } from '../../lib/apiClient.js';
-import { openExternalUrl } from '../../lib/openExternal.js';
+import { openLocalFile } from '../../lib/openLocalFile.js';
+import TinyPdfEditorLink from '../../components/common/TinyPdfEditorLink.jsx';
 import { collectPdfPasswords } from '../../lib/pdfPasswords.js';
-import { TINY_PDF_EDITOR_URL } from '../../../shared/constants.js';
 
 function fileName(filePath) {
   const normalized = String(filePath ?? '').replace(/\\/g, '/');
@@ -194,19 +194,11 @@ export default function PdfCompressPage() {
         <section>
           <h1 className="m-0 text-xl font-semibold text-slate-900">{TITLE}</h1>
           <p className="mt-1 text-sm text-slate-500">
-            Tiny PDF Editor 와 같이 텍스트·검색은 유지하고 이미지 위주로 압축합니다. 결과는{' '}
+            <TinyPdfEditorLink /> 와 같이 텍스트·검색은 유지하고 이미지 위주로 압축합니다. 결과는{' '}
             <code className={codeClass}>원본이름_optimize.pdf</code> 로 저장됩니다.
           </p>
           <p className="mt-1.5 text-sm text-slate-500">
-            페이지 순서·합치기·서명 등 편집은{' '}
-            <button
-              type="button"
-              className="font-medium text-app-accent hover:underline"
-              onClick={() => void openExternalUrl(TINY_PDF_EDITOR_URL)}
-            >
-              Tiny PDF Editor
-            </button>
-            를 사용하세요.
+            페이지 순서·합치기·서명 등 편집은 <TinyPdfEditorLink /> 를 사용하세요.
           </p>
         </section>
 
@@ -248,7 +240,19 @@ export default function PdfCompressPage() {
             {paths.length > 0 ? (
               <ul className="mt-3 max-h-40 overflow-auto rounded-lg border border-slate-200 divide-y divide-slate-100 bg-white">
                 {paths.map((item) => (
-                  <li key={item} className="flex items-center gap-2 px-3 py-1.5 text-sm">
+                  <li
+                    key={item}
+                    className="flex items-center gap-2 px-3 py-1.5 text-sm"
+                    title="더블클릭하면 연결된 프로그램으로 엽니다"
+                    onDoubleClick={() => {
+                      void openLocalFile(item).catch((err) => {
+                        void dialog.alert({
+                          title: TITLE,
+                          body: err instanceof Error ? err.message : '파일을 열지 못했습니다.',
+                        });
+                      });
+                    }}
+                  >
                     <span className="min-w-0 flex-1 truncate text-slate-700" title={item}>
                       {fileName(item)}
                     </span>

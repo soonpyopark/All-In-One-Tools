@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import InputDropZone from '../../components/common/InputDropZone.jsx';
 import { api, getNative } from '../../lib/apiClient.js';
+import { previewAttachedFile } from '../../lib/openLocalFile.js';
 import { useDialog } from '../../context/DialogContext.jsx';
 import { useReportJobRunning } from '../../context/JobActivityContext.jsx';
 import { useJobProgressScroll } from '../../hooks/useJobProgressScroll.js';
@@ -618,7 +619,12 @@ export default function ConvertPage({ mode = 'gif', featureId } = {}) {
                 {inputItems.length > 0 ? (
                   <ul className="mt-3 max-h-48 space-y-1 overflow-auto rounded-md border border-slate-200 bg-slate-50 p-2 text-sm">
                     {inputItems.map((item, index) => (
-                      <li key={item.key} className="flex items-center gap-2 rounded px-2 py-1 hover:bg-white">
+                      <li
+                        key={item.key}
+                        className="flex items-center gap-2 rounded px-2 py-1 hover:bg-white"
+                        title="더블클릭하면 연결된 프로그램으로 엽니다"
+                        onDoubleClick={() => previewAttachedFile(item.path, dialog)}
+                      >
                         {isMergeProfile ? (
                           <span className="w-5 shrink-0 text-xs text-slate-400">{index + 1}</span>
                         ) : null}

@@ -1,10 +1,13 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { formatClockTime } from '../../../shared/timeFormat.js';
 import { useAppInfo } from '../../context/AppInfoContext.jsx';
 import { useDialog } from '../../context/DialogContext.jsx';
 import { JobActivityProvider, useJobActivity } from '../../context/JobActivityContext.jsx';
 import { FEATURES } from '../../features/registry.js';
 import { api, getNative } from '../../lib/apiClient.js';
-import { canFavoriteFeature, orderFeatures } from '../../lib/featureOrder.js';
+import { CLOCK_HOUR12_EVENT } from '../../lib/clockHour12.js';
+import { PINNED_FEATURE_IDS, canFavoriteFeature, orderFeatures } from '../../lib/featureOrder.js';
+import { resetWindowSize } from '../../lib/resetWindowSize.js';
 import { runStartupUpdateCheck } from '../../lib/updateCheckUi.js';
 import SettingsView from '../settings/SettingsView.jsx';
 import TopBar from './TopBar.jsx';
@@ -12,15 +15,6 @@ import TopBar from './TopBar.jsx';
 const WEEKDAYS = ['일', '월', '화', '수', '목', '금', '토'];
 
 let startupChecked = false;
-
-function padTime(n) {
-  return String(n).padStart(2, '0');
-}
-
-/** @param {Date} date */
-function formatSidebarClock(date) {
-  return `${padTime(date.getHours())}:${padTime(date.getMinutes())}:${padTime(date.getSeconds())}`;
-}
 
 /** @param {Date} date */
 function formatSidebarDay(date) {
@@ -59,12 +53,22 @@ function AppShellInner() {
   const [sidebarCollapsed, setSidebarCollapsed] = useState(true);
   const [alwaysOnTop, setAlwaysOnTop] = useState(false);
   const [now, setNow] = useState(() => new Date());
+  const [clockHour12, setClockHour12] = useState(false);
   const mainRef = useRef(/** @type {HTMLElement | null} */ (null));
+  const sidebarNavRef = useRef(/** @type {HTMLDivElement | null} */ (null));
+  const [navOverflow, setNavOverflow] = useState({ pageable: false, top: false, bottom: false });
   /** 메뉴 id → 초기화 횟수. 해당 메뉴만 다시 마운트합니다. */
   const [resetKeys, setResetKeys] = useState(/** @type {Record<string, number>} */ ({}));
 
   const [featureOrder, setFeatureOrder] = useState(/** @type {string[]} */ ([]));
   const [featureFavorites, setFeatureFavorites] = useState(/** @type {string[]} */ ([]));
+  const sidebarClockLabel = formatClockTime(now, { hour12: clockHour12, withSeconds: true });
+  // 접힌 메뉴(w-14): 오전/오후 한글은 줄바꿈으로 높이가 늘어나 compact(2:05pm) 사용
+  const sidebarClockShort = formatClockTime(now, {
+    hour12: clockHour12,
+    withSeconds: false,
+    compact: true,
+  });
   /** Windows 전용 메뉴 등은 현재 OS 에 맞게 걸러냅니다. */
   const platformFeatures = useMemo(() => {
     const platform = appInfo?.platform || (typeof process !== 'undefined' ? process.platform : '');
@@ -75,6 +79,15 @@ function AppShellInner() {
   const features = useMemo(
     () => orderFeatures(platformFeatures, featureOrder, featureFavorites),
     [platformFeatures, featureOrder, featureFavorites],
+  );
+  /** 홈·런처는 사이드 상단 고정, 나머지 메뉴만 스크롤 */
+  const pinnedFeatures = useMemo(
+    () => features.filter((feature) => PINNED_FEATURE_IDS.includes(feature.id)),
+    [features],
+  );
+  const scrollFeatures = useMemo(
+    () => features.filter((feature) => !PINNED_FEATURE_IDS.includes(feature.id)),
+    [features],
   );
   const [activeId, setActiveId] = useState(FEATURES[0]?.id ?? '');
   const active = features.find((feature) => feature.id === activeId) ?? features[0];
@@ -105,11 +118,22 @@ function AppShellInner() {
         if (!alive) return;
         setFeatureOrder(Array.isArray(settings?.featureOrder) ? settings.featureOrder : []);
         setFeatureFavorites(Array.isArray(settings?.featureFavorites) ? settings.featureFavorites : []);
+        setClockHour12(settings?.clockHour12 === true);
       })
       .catch(() => undefined);
     return () => {
       alive = false;
     };
+  }, []);
+
+  useEffect(() => {
+    /** @param {Event} event */
+    const onHour12 = (event) => {
+      const detail = /** @type {CustomEvent<{ clockHour12?: boolean }> } */ (event).detail;
+      setClockHour12(detail?.clockHour12 === true);
+    };
+    window.addEventListener(CLOCK_HOUR12_EVENT, onHour12);
+    return () => window.removeEventListener(CLOCK_HOUR12_EVENT, onHour12);
   }, []);
 
   useEffect(() => {
@@ -132,6 +156,59 @@ function AppShellInner() {
   const toggleSidebar = () => {
     setSidebarCollapsed((prev) => !prev);
   };
+
+  /** 사이드 메뉴가 넘치면 위·아래 화살표 띠지 표시 (양끝에서는 비활성) */
+  const updateNavOverflow = useCallback(() => {
+    const el = sidebarNavRef.current;
+    if (!el) return;
+    const pageable = el.scrollHeight > el.clientHeight + 2;
+    const top = el.scrollTop > 2;
+    const bottom = el.scrollTop + el.clientHeight < el.scrollHeight - 2;
+    setNavOverflow((prev) =>
+      prev.pageable === pageable && prev.top === top && prev.bottom === bottom
+        ? prev
+        : { pageable, top, bottom },
+    );
+  }, []);
+
+  /** @param {1 | -1} direction */
+  const scrollNavBy = useCallback(
+    (direction) => {
+      const el = sidebarNavRef.current;
+      if (!el) return;
+      const step = Math.max(48, Math.floor(el.clientHeight * 0.75));
+      el.scrollBy({ top: direction * step, behavior: 'smooth' });
+    },
+    [],
+  );
+
+  useEffect(() => {
+    const el = sidebarNavRef.current;
+    if (!el) return undefined;
+    updateNavOverflow();
+    el.addEventListener('scroll', updateNavOverflow, { passive: true });
+    const ro = new ResizeObserver(updateNavOverflow);
+    ro.observe(el);
+    return () => {
+      el.removeEventListener('scroll', updateNavOverflow);
+      ro.disconnect();
+    };
+  }, [updateNavOverflow, scrollFeatures.length, sidebarCollapsed]);
+
+  useEffect(() => {
+    const el = sidebarNavRef.current;
+    if (!el) return;
+    // 스크롤 영역에 있는 활성 메뉴만 시야에 맞춤 (홈·런처는 고정)
+    if (active?.id && PINNED_FEATURE_IDS.includes(active.id)) {
+      updateNavOverflow();
+      return;
+    }
+    const current = el.querySelector('[aria-current="page"]');
+    if (current instanceof HTMLElement) {
+      current.scrollIntoView({ block: 'nearest' });
+    }
+    updateNavOverflow();
+  }, [active?.id, sidebarCollapsed, updateNavOverflow]);
 
   useEffect(() => {
     if (!active?.id) return;
@@ -204,6 +281,7 @@ function AppShellInner() {
         ...prev,
         [active.id]: (prev[active.id] || 0) + 1,
       }));
+      await resetWindowSize();
       return;
     }
     if (runningByFeature[active.id]) {
@@ -235,6 +313,7 @@ function AppShellInner() {
       ...prev,
       [active.id]: (prev[active.id] || 0) + 1,
     }));
+    await resetWindowSize();
   };
 
   const goTo = (id) => {
@@ -283,6 +362,54 @@ function AppShellInner() {
       .catch(() => setAlwaysOnTop(!next));
   };
 
+  /** @param {(typeof features)[number]} feature */
+  const renderNavButton = (feature) => {
+    const selected = feature.id === active?.id;
+    const jobLabel = runningByFeature[feature.id];
+    return (
+      <button
+        key={feature.id}
+        type="button"
+        aria-current={selected ? 'page' : undefined}
+        title={jobLabel ? `${feature.label} · ${jobLabel}` : feature.label}
+        className={`mb-1 flex w-full items-center rounded-md py-2 text-left text-sm transition-colors ${
+          sidebarCollapsed ? 'justify-center px-0' : 'gap-2 px-3'
+        } ${
+          selected
+            ? 'bg-app-sidebarHover font-semibold text-white'
+            : 'text-slate-300 hover:bg-app-sidebarHover/60 hover:text-white'
+        }`}
+        onClick={() => goTo(feature.id)}
+      >
+        {feature.icon ? (
+          <span aria-hidden="true" className="relative shrink-0 text-base leading-none">
+            {feature.icon}
+            {sidebarCollapsed && jobLabel ? (
+              <span
+                className="absolute -right-1 -top-1 h-1.5 w-1.5 animate-pulse rounded-full bg-amber-300"
+                aria-hidden="true"
+              />
+            ) : null}
+          </span>
+        ) : null}
+        {!sidebarCollapsed ? (
+          <>
+            <span className="min-w-0 flex-1 truncate">{feature.label}</span>
+            {jobLabel ? (
+              <span
+                className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-400/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300"
+                aria-label={jobLabel}
+              >
+                <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-300" aria-hidden="true" />
+                진행
+              </span>
+            ) : null}
+          </>
+        ) : null}
+      </button>
+    );
+  };
+
   return (
     <div className="flex h-full min-h-0 flex-col">
       <TopBar
@@ -303,72 +430,96 @@ function AppShellInner() {
               aria-label="기능"
               data-collapsed={sidebarCollapsed ? 'true' : 'false'}
             >
-              <div className="min-h-0 flex-1 overflow-auto">
-                {features.map((feature) => {
-                  const selected = feature.id === active?.id;
-                  const jobLabel = runningByFeature[feature.id];
-                  return (
-                    <button
-                      key={feature.id}
-                      type="button"
-                      aria-current={selected ? 'page' : undefined}
-                      title={jobLabel ? `${feature.label} · ${jobLabel}` : feature.label}
-                      className={`mb-1 flex w-full items-center rounded-md py-2 text-left text-sm transition-colors ${
-                        sidebarCollapsed ? 'justify-center px-0' : 'gap-2 px-3'
-                      } ${
-                        selected
-                          ? 'bg-app-sidebarHover font-semibold text-white'
-                          : 'text-slate-300 hover:bg-app-sidebarHover/60 hover:text-white'
-                      }`}
-                      onClick={() => goTo(feature.id)}
+              {pinnedFeatures.length > 0 ? (
+                <div className="shrink-0 border-b border-white/10 pb-1 mb-1">
+                  {pinnedFeatures.map((feature) => renderNavButton(feature))}
+                </div>
+              ) : null}
+              <div className="flex min-h-0 flex-1 flex-col">
+                {navOverflow.pageable ? (
+                  <button
+                    type="button"
+                    disabled={!navOverflow.top}
+                    className={`mb-1 flex h-5 w-full shrink-0 items-center justify-center rounded-md border shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-app-accent/40 ${
+                      navOverflow.top
+                        ? 'border-slate-400/70 bg-app-sidebarHover text-slate-100 hover:border-slate-300 hover:bg-slate-500/80 hover:text-white'
+                        : 'cursor-default border-slate-600/50 bg-app-sidebarHover/40 text-slate-500'
+                    }`}
+                    title="위로"
+                    aria-label="메뉴 위로"
+                    onClick={() => scrollNavBy(-1)}
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
                     >
-                      {feature.icon ? (
-                        <span aria-hidden="true" className="relative shrink-0 text-base leading-none">
-                          {feature.icon}
-                          {sidebarCollapsed && jobLabel ? (
-                            <span
-                              className="absolute -right-1 -top-1 h-1.5 w-1.5 animate-pulse rounded-full bg-amber-300"
-                              aria-hidden="true"
-                            />
-                          ) : null}
-                        </span>
-                      ) : null}
-                      {!sidebarCollapsed ? (
-                        <>
-                          <span className="min-w-0 flex-1 truncate">{feature.label}</span>
-                          {jobLabel ? (
-                            <span
-                              className="inline-flex shrink-0 items-center gap-1 rounded-full bg-amber-400/20 px-1.5 py-0.5 text-[10px] font-semibold text-amber-300"
-                              aria-label={jobLabel}
-                            >
-                              <span className="h-1.5 w-1.5 animate-pulse rounded-full bg-amber-300" aria-hidden="true" />
-                              진행
-                            </span>
-                          ) : null}
-                        </>
-                      ) : null}
-                    </button>
-                  );
-                })}
+                      <path d="m6 15 6-6 6 6" />
+                    </svg>
+                  </button>
+                ) : null}
+                <div
+                  ref={sidebarNavRef}
+                  className="sidebar-nav-scroll min-h-0 flex-1 overflow-y-auto overflow-x-hidden"
+                >
+                  {scrollFeatures.map((feature) => renderNavButton(feature))}
+                </div>
+                {navOverflow.pageable ? (
+                  <button
+                    type="button"
+                    disabled={!navOverflow.bottom}
+                    className={`mt-1 flex h-5 w-full shrink-0 items-center justify-center rounded-md border shadow-sm transition focus:outline-none focus-visible:ring-2 focus-visible:ring-app-accent/40 ${
+                      navOverflow.bottom
+                        ? 'border-slate-400/70 bg-app-sidebarHover text-slate-100 hover:border-slate-300 hover:bg-slate-500/80 hover:text-white'
+                        : 'cursor-default border-slate-600/50 bg-app-sidebarHover/40 text-slate-500'
+                    }`}
+                    title="아래로"
+                    aria-label="메뉴 아래로"
+                    onClick={() => scrollNavBy(1)}
+                  >
+                    <svg
+                      width="14"
+                      height="14"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2.6"
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      aria-hidden="true"
+                    >
+                      <path d="m6 9 6 6 6-6" />
+                    </svg>
+                  </button>
+                ) : null}
               </div>
-              <div className="mt-2 flex shrink-0 flex-col gap-0.5">
+              <div className="mt-1 flex shrink-0 flex-col gap-0.5 border-t border-white/10 pt-1">
                 <button
                   type="button"
                   className={`flex w-full items-center justify-center rounded-md py-2 transition-colors hover:bg-app-sidebarHover/60 ${
                     sidebarCollapsed ? 'px-0' : 'px-3'
                   }`}
                   title="시간 & 알람으로 이동"
-                  aria-label={`현재 시각 ${formatSidebarClock(now)}, ${formatSidebarDay(now)}. 시간 및 알람으로 이동`}
+                  aria-label={`현재 시각 ${sidebarClockLabel}, ${formatSidebarDay(now)}. 시간 및 알람으로 이동`}
                   onClick={() => goTo('clock')}
                 >
                   {sidebarCollapsed ? (
-                    <span className="font-mono text-[10px] font-semibold tabular-nums text-slate-300">
-                      {padTime(now.getHours())}:{padTime(now.getMinutes())}
+                    <span
+                      className="block max-w-full truncate whitespace-nowrap text-center font-mono text-[10px] font-semibold leading-none tabular-nums text-slate-300"
+                      title={sidebarClockLabel}
+                    >
+                      {sidebarClockShort}
                     </span>
                   ) : (
                     <span className="flex min-w-0 items-baseline justify-center gap-2 whitespace-nowrap">
                       <span className="font-mono text-lg font-semibold tabular-nums tracking-tight text-slate-100">
-                        {formatSidebarClock(now)}
+                        {sidebarClockLabel}
                       </span>
                       <span className="text-sm text-slate-400">{formatSidebarDay(now)}</span>
                     </span>

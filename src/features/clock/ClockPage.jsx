@@ -1,7 +1,9 @@
 import { useEffect, useMemo, useState } from 'react';
-import { Section, btnClass, btnPrimaryClass, inputClass } from '../../components/settings/ui.jsx';
+import { formatClockTime } from '../../../shared/timeFormat.js';
+import { Section, ToggleRow, btnClass, btnPrimaryClass, inputClass } from '../../components/settings/ui.jsx';
 import { useDialog } from '../../context/DialogContext.jsx';
 import { api, getNative } from '../../lib/apiClient.js';
+import { notifyClockHour12 } from '../../lib/clockHour12.js';
 import { showExportDone } from '../../lib/exportDone.jsx';
 
 /**
@@ -26,10 +28,6 @@ import { showExportDone } from '../../lib/exportDone.jsx';
 
 function pad(n) {
   return String(n).padStart(2, '0');
-}
-
-function formatClock(date) {
-  return `${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 }
 
 function formatDate(date) {
@@ -86,10 +84,27 @@ export default function ClockPage() {
   const [draftRepeat, setDraftRepeat] = useState(/** @type {'once' | 'daily' | 'date'} */ ('once'));
   const [soundPath, setSoundPath] = useState('');
   const [busy, setBusy] = useState(false);
+  const [hour12, setHour12] = useState(false);
+  const [savingHour12, setSavingHour12] = useState(false);
 
   useEffect(() => {
     const id = window.setInterval(() => setNow(new Date()), 250);
     return () => window.clearInterval(id);
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    api('settings.get')
+      .then((settings) => {
+        if (!alive) return;
+        const next = settings?.clockHour12 === true;
+        setHour12(next);
+        notifyClockHour12(next);
+      })
+      .catch(() => undefined);
+    return () => {
+      alive = false;
+    };
   }, []);
 
   useEffect(() => {
@@ -258,6 +273,26 @@ export default function ClockPage() {
     }
   };
 
+  const onToggleHour12 = async (checked) => {
+    const prev = hour12;
+    setHour12(checked);
+    setSavingHour12(true);
+    try {
+      const next = await api('settings.update', { clockHour12: checked });
+      const value = next?.clockHour12 === true;
+      setHour12(value);
+      notifyClockHour12(value);
+    } catch (err) {
+      setHour12(prev);
+      void dialog.alert({
+        title: '시간 표시',
+        body: err instanceof Error ? err.message : '시제 설정을 저장하지 못했습니다.',
+      });
+    } finally {
+      setSavingHour12(false);
+    }
+  };
+
   const dismiss = async () => {
     try {
       await api('clock.dismiss');
@@ -407,11 +442,23 @@ export default function ClockPage() {
           </section>
         ) : null}
 
-        <Section title="현재 시각">
+        <Section
+          title="현재 시각"
+          description="24시간제와 12시간제(오전/오후) 중 고를 수 있습니다. 왼쪽 메뉴 하단 시각에도 같이 적용됩니다."
+        >
           <p className="m-0 font-mono text-5xl font-semibold tracking-tight text-slate-900 tabular-nums">
-            {formatClock(now)}
+            {formatClockTime(now, { hour12, withSeconds: true })}
           </p>
           <p className="mt-2 text-sm text-slate-500">{formatDate(now)}</p>
+          <div className="mt-4 border-t border-slate-100 pt-2">
+            <ToggleRow
+              label="12시간제로 표시"
+              hint={hour12 ? '오전/오후로 표시합니다.' : '0–23시 기준으로 표시합니다.'}
+              checked={hour12}
+              disabled={savingHour12}
+              onChange={(checked) => void onToggleHour12(checked)}
+            />
+          </div>
         </Section>
 
         <Section

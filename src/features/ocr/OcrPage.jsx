@@ -1,6 +1,8 @@
 import { useEffect, useMemo, useState } from 'react';
 import InputDropZone from '../../components/common/InputDropZone.jsx';
+import TinyPdfEditorLink from '../../components/common/TinyPdfEditorLink.jsx';
 import { api, getNative } from '../../lib/apiClient.js';
+import { previewAttachedFile } from '../../lib/openLocalFile.js';
 import { useDialog } from '../../context/DialogContext.jsx';
 import { useReportJobRunning } from '../../context/JobActivityContext.jsx';
 import { useJobProgressScroll } from '../../hooks/useJobProgressScroll.js';
@@ -232,8 +234,8 @@ export default function OcrPage({ featureId } = {}) {
         <section>
           <h1 className="m-0 text-xl font-semibold text-slate-900">{TITLE}</h1>
           <p className="mt-1 text-sm text-slate-500">
-            스캔 PDF·이미지에 검색 가능한 글자 층을 붙입니다. 이미지는 PDF 로 변환한 뒤 OCR 하며, 결과는 PDF 로 저장됩니다.
-            Tiny PDF Editor 와 같은 PP-OCRv5(한국어+영어) 엔진을 쓰고, 다른 언어는 아래에서 추가로 켤 수 있습니다.
+            스캔 PDF·이미지에 검색 가능한 글자 층을 붙입니다. 이미지는 PDF 로 변환한 뒤 OCR 하며, 결과는 PDF 로 저장됩니다.{' '}
+            <TinyPdfEditorLink /> 와 같은 PP-OCRv5(한국어+영어) 엔진을 쓰고, 다른 언어는 아래에서 추가로 켤 수 있습니다.
           </p>
         </section>
 
@@ -280,7 +282,12 @@ export default function OcrPage({ featureId } = {}) {
                 {items.length > 0 ? (
                   <ul className="mt-3 max-h-56 space-y-1 overflow-auto rounded-md border border-slate-200 bg-slate-50 p-2 text-sm">
                     {items.map((item) => (
-                      <li key={item.key} className="flex items-center gap-2 rounded px-2 py-1 hover:bg-white">
+                      <li
+                        key={item.key}
+                        className="flex items-center gap-2 rounded px-2 py-1 hover:bg-white"
+                        title="더블클릭하면 연결된 프로그램으로 엽니다"
+                        onDoubleClick={() => previewAttachedFile(item.path, dialog)}
+                      >
                         <span className="min-w-0 flex-1 truncate" title={item.path}>
                           {item.name}
                           <span className="ml-2 text-xs text-slate-400">{formatSize(item.size)}</span>

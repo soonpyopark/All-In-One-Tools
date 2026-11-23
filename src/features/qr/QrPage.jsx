@@ -433,7 +433,7 @@ export default function QrPage() {
               className={cameraOn ? btnPrimaryClass : btnClass}
               onClick={toggleCamera}
             >
-              {cameraOn ? '카메라 끄기' : '카메라로 받기'}
+              {cameraOn ? '카메라 끄기' : '카메라 켜기'}
             </button>
             <button type="button" className={btnClass} disabled={!lastRegion || cameraOn} onClick={() => void rescan()}>
               다시 스캔

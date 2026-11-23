@@ -21,6 +21,7 @@ const SETTINGS_FILE = 'settings.json';
  *   folders: Record<string, string>,
  *   featureOrder: string[],
  *   featureFavorites: string[],
+ *   clockHour12: boolean,
  * }} AppSettings
  */
 
@@ -37,6 +38,8 @@ function defaultSettings() {
     folders: {},
     featureOrder: [],
     featureFavorites: [],
+    // false = 24시간제 (기본), true = 12시간제(오전/오후)
+    clockHour12: false,
   };
 }
 
@@ -80,6 +83,7 @@ function normalizeSettings(raw) {
     folders: normalizeFolders(src.folders),
     featureOrder: normalizeFeatureOrder(src.featureOrder),
     featureFavorites: normalizeFeatureFavorites(src.featureFavorites),
+    clockHour12: src.clockHour12 === true,
   };
 }
 

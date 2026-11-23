@@ -5,6 +5,12 @@
 /** Display name (UI, window title). */
 export const APP_NAME = 'All In One Tools';
 
+/** 메인 창 최초 실행 크기 (초기화 시에도 이 크기로 되돌림). */
+export const MAIN_WINDOW_WIDTH = 1280;
+export const MAIN_WINDOW_HEIGHT = 800;
+export const MAIN_WINDOW_MIN_WIDTH = 960;
+export const MAIN_WINDOW_MIN_HEIGHT = 600;
+
 /**
  * Windows AppUserModelID (`package.json` build.appId 와 동일).
  * main.js 에서 app.setAppUserModelId 로 건다.
@@ -23,7 +29,7 @@ export const APP_FILE_NAME = 'AllTools';
  * - Git 태그·GitHub Release: `v1.0.1-N`  (하이픈) ← `APP_GIT_TAG`
  * - `package.json` version: `1.0.1-N`  (electron-builder semver)
  */
-export const APP_VERSION = '1.0.2.0';
+export const APP_VERSION = '1.0.2.1';
 
 /**
  * Git 태그 문자열. `1.0.1.5` → `v1.0.1-5`
@@ -45,7 +51,7 @@ export const APP_GIT_TAG = formatAppGitTag(APP_VERSION);
  * Package build id (YYMMDD_HHMMSS). Rewritten by `npm run build:release*`
  * (scripts/sync-build-stamp.mjs); matches the suffix of the produced files.
  */
-export const APP_BUILD_STAMP = '261120_010704';
+export const APP_BUILD_STAMP = '261123_233613';
 
 /**
  * GitHub repository (`owner/repo`) whose latest release is used by the
@@ -54,10 +60,10 @@ export const APP_BUILD_STAMP = '261120_010704';
 export const UPDATE_REPO = 'soonpyopark/All-In-One-Tools';
 
 /**
- * 페이지 순서·합치기·서명 등 PDF 편집은 Tiny PDF Editor 로 안내합니다.
- * @see https://github.com/soonpyopark/Tiny-PDF-Editor
+ * 페이지 순서·합치기·서명 등 PDF 편집은 Tiny PDF Editor 릴리스로 안내합니다.
+ * @see https://github.com/soonpyopark/Tiny-PDF-Editor/releases
  */
-export const TINY_PDF_EDITOR_URL = 'https://github.com/soonpyopark/Tiny-PDF-Editor';
+export const TINY_PDF_EDITOR_URL = 'https://github.com/soonpyopark/Tiny-PDF-Editor/releases';
 
 /** 출장 경로 찾기 (Path Finder) — 런처 기본 바로가기용. */
 export const PATH_FINDER_URL = 'https://pathfinder-eight-pearl.vercel.app/';

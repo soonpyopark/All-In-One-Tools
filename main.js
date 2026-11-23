@@ -2,7 +2,14 @@ import { app, BrowserWindow, dialog, ipcMain, Menu, session, shell } from 'elect
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath, pathToFileURL } from 'node:url';
-import { APP_NAME, APP_USER_MODEL_ID } from './shared/constants.js';
+import {
+  APP_NAME,
+  APP_USER_MODEL_ID,
+  MAIN_WINDOW_HEIGHT,
+  MAIN_WINDOW_MIN_HEIGHT,
+  MAIN_WINDOW_MIN_WIDTH,
+  MAIN_WINDOW_WIDTH,
+} from './shared/constants.js';
 import { ApiError, dispatchApi } from './electron/api/registry.js';
 import { registerCoreApi } from './electron/api/coreApi.js';
 import { setAppContext } from './electron/context.js';
@@ -209,10 +216,10 @@ function createMainWindow() {
   const appUrl = pathToFileURL(path.join(rendererDir, 'index.html')).href;
 
   const win = new BrowserWindow({
-    width: 1280,
-    height: 800,
-    minWidth: 960,
-    minHeight: 600,
+    width: MAIN_WINDOW_WIDTH,
+    height: MAIN_WINDOW_HEIGHT,
+    minWidth: MAIN_WINDOW_MIN_WIDTH,
+    minHeight: MAIN_WINDOW_MIN_HEIGHT,
     title: APP_NAME,
     backgroundColor: '#0f172a',
     autoHideMenuBar: true,
@@ -389,6 +396,20 @@ function registerIpc() {
     return true;
   });
 
+  /** 로컬 파일을 OS에 연결된 프로그램으로 엽니다. */
+  handleTrusted('frame:openPath', async (_event, targetPath) => {
+    const resolved = path.resolve(String(targetPath ?? '').trim());
+    if (!resolved || !fs.existsSync(resolved)) {
+      return { ok: false, error: '파일을 찾을 수 없습니다.' };
+    }
+    if (!fs.statSync(resolved).isFile()) {
+      return { ok: false, error: '파일만 열 수 있습니다.' };
+    }
+    const error = await shell.openPath(resolved);
+    if (error) return { ok: false, error };
+    return { ok: true };
+  });
+
   handleTrusted('frame:getAlwaysOnTop', (event) => {
     const win = senderWindow(event);
     return { enabled: Boolean(win && !win.isDestroyed() && win.isAlwaysOnTop()) };
@@ -399,6 +420,19 @@ function registerIpc() {
     if (!win || win.isDestroyed()) return { enabled: false };
     win.setAlwaysOnTop(Boolean(enabled));
     return { enabled: win.isAlwaysOnTop() };
+  });
+
+  /** 창 크기를 최초 실행 크기로 되돌립니다. */
+  handleTrusted('frame:resetWindowSize', (event) => {
+    const win = senderWindow(event);
+    if (!win || win.isDestroyed()) {
+      return { ok: false, width: MAIN_WINDOW_WIDTH, height: MAIN_WINDOW_HEIGHT };
+    }
+    if (win.isFullScreen()) win.setFullScreen(false);
+    if (win.isMaximized()) win.unmaximize();
+    win.setSize(MAIN_WINDOW_WIDTH, MAIN_WINDOW_HEIGHT);
+    const [width, height] = win.getSize();
+    return { ok: true, width, height };
   });
 }
 

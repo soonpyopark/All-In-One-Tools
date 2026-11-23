@@ -218,14 +218,38 @@ if (-not $proc) { throw 'UAC 실행이 시작되지 않았습니다.' }
   return { ok: true, elevated: true, already: false };
 }
 
+/** 화면보호기 사용자 설정 */
+const SCREENSAVER_USER_KEY = 'HKCU:\\Control Panel\\Desktop';
+/** 그룹 정책이 덮어쓰는 화면보호기 키 */
+const SCREENSAVER_POLICY_KEY =
+  'HKCU:\\Software\\Policies\\Microsoft\\Windows\\Control Panel\\Desktop';
+
+const SCREENSAVER_POLICY_MSG =
+  '화면보호기가 Windows 정책으로 강제되어 있습니다. 조직 정책이거나 로컬 보안 정책에서 허용한 뒤에 다시 시도해 주세요.';
+
 /**
- * 화면보호기 활성 여부 (true = 켜짐).
+ * 실효 화면보호기 활성 여부 (true = 켜짐). 정책 키를 사용자 설정보다 우선.
  * @returns {Promise<boolean>}
  */
 async function getScreensaverActive() {
   const out = await runPowerShell(`
 $ErrorActionPreference = 'Stop'
-$v = (Get-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name ScreenSaveActive -ErrorAction SilentlyContinue).ScreenSaveActive
+$policyPath = '${SCREENSAVER_POLICY_KEY}'
+$userPath = '${SCREENSAVER_USER_KEY}'
+$policyActive = $null
+$policyScr = $null
+if (Test-Path $policyPath) {
+  $p = Get-ItemProperty -Path $policyPath -ErrorAction SilentlyContinue
+  if ($null -ne $p) {
+    $names = @($p.PSObject.Properties.Name)
+    if ($names -contains 'ScreenSaveActive') { $policyActive = [string]$p.ScreenSaveActive }
+    if ($names -contains 'SCRNSAVE.EXE') { $policyScr = [string]$p.'SCRNSAVE.EXE' }
+  }
+}
+if ($null -ne $policyActive -and $policyActive.Trim() -eq '0') { '0'; exit 0 }
+if ($null -ne $policyActive -and $policyActive.Trim() -eq '1') { '1'; exit 0 }
+if ($null -ne $policyScr -and $policyScr.Trim().Length -gt 0) { '1'; exit 0 }
+$v = (Get-ItemProperty -Path $userPath -Name ScreenSaveActive -ErrorAction SilentlyContinue).ScreenSaveActive
 if ($null -eq $v) { '1' } else { [string]$v }
 `);
   return String(out).trim() !== '0';
@@ -237,6 +261,8 @@ if ($null -eq $v) { '1' } else { [string]$v }
 async function setScreensaverActive(active) {
   const uiParam = active ? 1 : 0;
   const regValue = active ? '1' : '0';
+  // 끄기: Control Panel 「없음」과 같이 ScreenSaveActive=0 + SCRNSAVE.EXE 제거
+  // 켜기: SPI + ScreenSaveActive=1 (이전에 지운 .scr 은 복원하지 않음)
   await runPowerShell(`
 $ErrorActionPreference = 'Stop'
 Add-Type -TypeDefinition @"
@@ -251,7 +277,45 @@ public static class AllToolsSpi {
 if (-not [AllToolsSpi]::SystemParametersInfo(0x0011, ${uiParam}, [IntPtr]::Zero, 3)) {
   throw "SystemParametersInfo 실패 (Win32=$([Runtime.InteropServices.Marshal]::GetLastWin32Error()))"
 }
-Set-ItemProperty -Path 'HKCU:\\Control Panel\\Desktop' -Name ScreenSaveActive -Value '${regValue}' -Type String
+$userPath = '${SCREENSAVER_USER_KEY}'
+Set-ItemProperty -Path $userPath -Name ScreenSaveActive -Value '${regValue}' -Type String
+if (${uiParam} -eq 0) {
+  Remove-ItemProperty -Path $userPath -Name 'SCRNSAVE.EXE' -ErrorAction SilentlyContinue
+}
+
+$policyPath = '${SCREENSAVER_POLICY_KEY}'
+if (Test-Path $policyPath) {
+  $p = Get-ItemProperty -Path $policyPath -ErrorAction SilentlyContinue
+  $policyActive = $null
+  $policyScr = $null
+  if ($null -ne $p) {
+    $names = @($p.PSObject.Properties.Name)
+    if ($names -contains 'ScreenSaveActive') { $policyActive = [string]$p.ScreenSaveActive }
+    if ($names -contains 'SCRNSAVE.EXE') { $policyScr = [string]$p.'SCRNSAVE.EXE' }
+  }
+  $forced = $false
+  if ($null -ne $policyActive -and $policyActive.Trim() -eq '1') { $forced = $true }
+  elseif (($null -eq $policyActive -or $policyActive.Trim() -eq '') -and $null -ne $policyScr -and $policyScr.Trim().Length -gt 0) { $forced = $true }
+  if ($forced -and ${uiParam} -eq 0) {
+    try {
+      Set-ItemProperty -Path $policyPath -Name ScreenSaveActive -Value '0' -Type String -ErrorAction Stop
+      Remove-ItemProperty -Path $policyPath -Name 'SCRNSAVE.EXE' -ErrorAction SilentlyContinue
+    } catch {
+      throw 'SCREENSAVER_POLICY'
+    }
+    $p2 = Get-ItemProperty -Path $policyPath -ErrorAction SilentlyContinue
+    $stillActive = $null
+    $stillScr = $null
+    if ($null -ne $p2) {
+      $names2 = @($p2.PSObject.Properties.Name)
+      if ($names2 -contains 'ScreenSaveActive') { $stillActive = [string]$p2.ScreenSaveActive }
+      if ($names2 -contains 'SCRNSAVE.EXE') { $stillScr = [string]$p2.'SCRNSAVE.EXE' }
+    }
+    if (($null -ne $stillActive -and $stillActive.Trim() -eq '1') -or (($null -eq $stillActive -or $stillActive.Trim() -ne '0') -and $null -ne $stillScr -and $stillScr.Trim().Length -gt 0)) {
+      throw 'SCREENSAVER_POLICY'
+    }
+  }
+}
 `);
 }
 
@@ -671,8 +735,22 @@ export function register() {
 
   defineApi('windowsSystem.setScreensaver', async (body) => {
     const active = Boolean(body?.active);
-    await setScreensaverActive(active);
-    return { active: await getScreensaverActive() };
+    try {
+      await setScreensaverActive(active);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err ?? '');
+      if (/SCREENSAVER_POLICY/.test(message)) {
+        throw new ApiError(SCREENSAVER_POLICY_MSG);
+      }
+      if (err instanceof ApiError) throw err;
+      throw new ApiError(message || '화면보호기 설정에 실패했습니다.');
+    }
+    const effective = await getScreensaverActive();
+    // 끄기 요청인데 실효 상태가 여전히 켜짐 → 정책 등으로 덮인 경우
+    if (!active && effective) {
+      throw new ApiError(SCREENSAVER_POLICY_MSG);
+    }
+    return { active: effective };
   });
 
   defineApi('windowsSystem.changePassword', async (body) => {

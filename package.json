@@ -1,7 +1,7 @@
 {
   "name": "all-tools",
   "productName": "AllTools",
-  "version": "1.0.2-0",
+  "version": "1.0.2-1",
   "description": "All-Tools: Electron app with video-to-GIF conversion and extensible tools.",
   "main": "main.js",
   "type": "module",
@@ -42,6 +42,7 @@
     "@napi-rs/canvas": "^1.1.1",
     "@nuintun/qrcode": "^5.1.0",
     "@nut-tree-fork/nut-js": "^4.2.6",
+    "exceljs": "^4.4.0",
     "fflate": "^0.8.3",
     "jsqr": "^1.4.0",
     "mupdf": "^1.28.6",
@@ -73,7 +74,8 @@
       "node_modules/@img/**/*",
       "node_modules/@napi-rs/**/*",
       "node_modules/@nut-tree-fork/**/*",
-      "node_modules/onnxruntime-node/**/*"
+      "node_modules/onnxruntime-node/**/*",
+      "electron/hwpMerge/**/*"
     ],
     "extraResources": [
       {

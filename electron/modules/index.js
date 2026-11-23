@@ -9,12 +9,15 @@ import * as capture from './capture.js';
 import * as cleanup from './cleanup.js';
 import * as clock from './clock.js';
 import * as convert from './convert.js';
+import * as excelCompare from './excelCompare.js';
+import * as excelMerge from './excelMerge.js';
 import * as files from './files.js';
 import * as launcher from './launcher.js';
 import * as ocr from './ocr.js';
 import * as pdfTools from './pdfTools.js';
 import * as qr from './qr.js';
 import * as rename from './rename.js';
+import * as hwpMerge from './hwpMerge.js';
 import * as windowsSystem from './windowsSystem.js';
 
 /** @type {{ register: () => void }[]} */
@@ -29,7 +32,10 @@ const MODULES = [
   launcher,
   clock,
   pdfTools,
+  excelCompare,
+  excelMerge,
   windowsSystem,
+  hwpMerge,
 ];
 
 export function registerModules() {

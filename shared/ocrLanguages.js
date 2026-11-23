@@ -20,7 +20,7 @@ export const OCR_LANGUAGE_OPTIONS = [
     label: '한국어',
     defaultOn: true,
     modelId: 'korean',
-    hint: '영문·숫자도 함께 인식합니다. (Tiny PDF Editor 와 동일 모델)',
+    hint: '영문·숫자도 함께 인식합니다.',
   },
   {
     id: 'english',

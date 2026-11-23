@@ -1,13 +1,13 @@
 import { useEffect, useMemo, useState } from 'react';
 import InputDropZone from '../../components/common/InputDropZone.jsx';
 import { api, getNative } from '../../lib/apiClient.js';
+import { previewAttachedFile } from '../../lib/openLocalFile.js';
 import { useDialog } from '../../context/DialogContext.jsx';
 import { useReportJobRunning } from '../../context/JobActivityContext.jsx';
 import { useJobProgressScroll } from '../../hooks/useJobProgressScroll.js';
 import { useLoad } from '../../hooks/useLoad.js';
-import { openExternalUrl } from '../../lib/openExternal.js';
+import TinyPdfEditorLink from '../../components/common/TinyPdfEditorLink.jsx';
 import { collectPdfPasswords } from '../../lib/pdfPasswords.js';
-import { TINY_PDF_EDITOR_URL } from '../../../shared/constants.js';
 import RegionPreview from './RegionPreview.jsx';
 import {
   Badge,
@@ -409,15 +409,7 @@ export default function CleanupPage({ tool = 'ebook-extract', featureId } = {}) 
           </p>
           {isPdf ? (
             <p className="mt-1.5 text-sm text-slate-500">
-              페이지 순서·합치기·서명 등 편집은{' '}
-              <button
-                type="button"
-                className="font-medium text-app-accent hover:underline"
-                onClick={() => void openExternalUrl(TINY_PDF_EDITOR_URL)}
-              >
-                Tiny PDF Editor
-              </button>
-              를 사용하세요.
+              페이지 순서·합치기·서명 등 편집은 <TinyPdfEditorLink /> 를 사용하세요.
             </p>
           ) : null}
         </section>
@@ -480,7 +472,12 @@ export default function CleanupPage({ tool = 'ebook-extract', featureId } = {}) 
                 {inputItems.length > 0 ? (
                   <ul className="mt-3 max-h-48 space-y-1 overflow-auto rounded-md border border-slate-200 bg-slate-50 p-2 text-sm">
                     {inputItems.map((item, index) => (
-                      <li key={item.key} className="flex items-center gap-2 rounded px-2 py-1 hover:bg-white">
+                      <li
+                        key={item.key}
+                        className="flex items-center gap-2 rounded px-2 py-1 hover:bg-white"
+                        title="더블클릭하면 연결된 프로그램으로 엽니다"
+                        onDoubleClick={() => previewAttachedFile(item.path, dialog)}
+                      >
                         {isEbook ? <span className="w-5 shrink-0 text-xs text-slate-400">{index + 1}</span> : null}
                         <span className="min-w-0 flex-1 truncate" title={item.path}>
                           {item.label}

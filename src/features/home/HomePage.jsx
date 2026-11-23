@@ -1,11 +1,11 @@
 import { useMemo, useRef, useState } from 'react';
 import AppLogo from '../../components/common/AppLogo.jsx';
 import { useAppInfo } from '../../context/AppInfoContext.jsx';
-import { canFavoriteFeature } from '../../lib/featureOrder.js';
+import { PINNED_FEATURE_IDS, canFavoriteFeature } from '../../lib/featureOrder.js';
 
 /**
  * 홈: 메뉴 바로가기 + 사용 안내.
- * 홈·런처는 상단 고정. 나머지 카드는 별표 즐겨찾기·드래그 순서 변경.
+ * 홈·런처는 카드에 넣지 않음(사이드·하단 바로가기). 카드는 별표·드래그 순서 변경.
  *
  * @param {{
  *   features?: import('../registry.js').FeatureDefinition[],
@@ -22,8 +22,13 @@ export default function HomePage({
   favoriteIds = [],
   onToggleFavorite,
 }) {
-  const shortcuts = features.filter((feature) => feature.id !== 'home');
+  // 홈·런처는 상단 바로가기 아이콘으로만 — 카드 목록에서는 제외
+  const shortcuts = useMemo(
+    () => features.filter((feature) => !PINNED_FEATURE_IDS.includes(feature.id)),
+    [features],
+  );
   const favoriteSet = useMemo(() => new Set(favoriteIds), [favoriteIds]);
+  const pinnedSet = useMemo(() => new Set(PINNED_FEATURE_IDS), []);
   const appInfo = useAppInfo();
   const dragIdRef = useRef(/** @type {string | null} */ (null));
   /** 드래그가 실제로 시작되면 클릭 이동을 막기 위한 플래그 */
@@ -33,9 +38,9 @@ export default function HomePage({
 
   const moveBefore = (fromId, toId) => {
     if (!fromId || !toId || fromId === toId) return;
-    // 런처는 고정 — 끌어오거나 끌어넣을 수 없음
-    if (fromId === 'launcher' || toId === 'launcher') return;
-    const ids = shortcuts.map((feature) => feature.id).filter((id) => id !== 'launcher');
+    // 홈·런처는 카드에 없음 — 방어적으로 고정 id 차단
+    if (pinnedSet.has(fromId) || pinnedSet.has(toId)) return;
+    const ids = shortcuts.map((feature) => feature.id);
     const from = ids.indexOf(fromId);
     const to = ids.indexOf(toId);
     if (from < 0 || to < 0) return;
@@ -53,7 +58,7 @@ export default function HomePage({
           <div>
             <h1 className="m-0 text-xl font-semibold text-slate-900">{appInfo.name}</h1>
             <p className="mt-1 text-xs text-slate-400">
-              홈·런처는 항상 위에 둡니다. 별표로 즐겨찾기하고, 나머지 카드는 끌어 순서를 바꿀 수 있습니다.
+              별표로 즐겨찾기하고, 카드는 끌어 순서를 바꿀 수 있습니다. 홈·런처는 왼쪽 메뉴와 하단 바로가기를 이용하세요.
             </p>
           </div>
         </section>
@@ -61,7 +66,7 @@ export default function HomePage({
         {shortcuts.length > 0 ? (
           <section aria-label="바로가기" className="grid grid-cols-[repeat(auto-fill,minmax(16rem,1fr))] gap-3">
             {shortcuts.map((feature) => {
-              const pinned = feature.id === 'launcher';
+              const pinned = pinnedSet.has(feature.id);
               const favoritable = canFavoriteFeature(feature.id);
               const favorited = favoritable && favoriteSet.has(feature.id);
               const isDragging = draggingId === feature.id;
@@ -74,16 +79,10 @@ export default function HomePage({
                       ? 'cursor-grabbing border-dashed border-slate-300 opacity-50'
                       : isOver
                         ? 'border-dashed border-app-accent ring-2 ring-app-accent/20'
-                        : pinned
-                          ? 'border-solid border-app-border'
-                          : 'cursor-grab border-solid border-app-border hover:-translate-y-0.5 hover:border-slate-300'
+                        : 'cursor-grab border-solid border-app-border hover:-translate-y-0.5 hover:border-slate-300'
                   }`}
-                  draggable={!pinned}
-                  title={
-                    pinned
-                      ? '런처는 항상 위에 고정됩니다'
-                      : '끌어서 순서 변경 · 클릭하여 이동 · 별표로 즐겨찾기'
-                  }
+                  draggable
+                  title="끌어서 순서 변경 · 클릭하여 이동 · 별표로 즐겨찾기"
                   onDragStart={(event) => {
                     if (pinned) {
                       event.preventDefault();
@@ -181,9 +180,6 @@ export default function HomePage({
                     <span className="pr-6">
                       <span className="block text-sm font-semibold text-slate-900 group-hover:text-app-accent">
                         {feature.label}
-                        {pinned ? (
-                          <span className="ml-1.5 text-[10px] font-medium text-slate-400">고정</span>
-                        ) : null}
                       </span>
                       {feature.description ? (
                         <span className="mt-1 block text-xs leading-relaxed text-slate-500">
