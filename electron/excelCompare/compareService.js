@@ -7,6 +7,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import ExcelJS from 'exceljs';
 import { detectHeaderRange, fillMergedCells, flattenHeaderLabels, normalizeHeaderRange } from '../excel/headerRange.js';
+import { createLegacyConvertCache, isLegacyExcelPath } from '../excel/legacyToXlsx.js';
 
 const require = createRequire(import.meta.url);
 const XLSX = require('./xlsx.full.min.cjs');
@@ -47,6 +48,9 @@ const SHEET_COMPARE = '비교';
 const SHEET_RESULT = '결과';
 const KEY_SEP = '\u0001';
 
+/** 결과 파일 기본 격자 테두리 (진한 회색 실선) */
+const GRID_BORDER_ARGB = 'FF595959';
+
 function extOf(filePath) {
   return path.extname(String(filePath ?? '')).toLowerCase();
 }
@@ -64,22 +68,73 @@ export function isLegacyFormat(filePath) {
   return LEGACY_XLS.has(ext) || XLSB.has(ext);
 }
 
-/** @param {unknown} value */
+/**
+ * ExcelJS/SheetJS 셀 값을 비교 키용 문자열로 통일합니다.
+ * rich text·수식 결과·하이퍼링크 등을 풀지 않으면 "[object Object]" 가 되어 하이라이트가 전부 빠집니다.
+ * @param {unknown} value
+ */
 export function normalizeCellValue(value) {
   if (value == null) return '';
-  if (typeof value === 'number' && Number.isFinite(value) && Number.isInteger(value)) {
-    return String(value);
+  if (typeof value === 'string') return value.trim();
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return Number.isInteger(value) ? String(value) : String(value);
   }
-  if (typeof value === 'object' && value && 'text' in value) {
-    return String(/** @type {{ text?: unknown }} */ (value).text ?? '').trim();
-  }
-  if (typeof value === 'object' && value && 'result' in value) {
-    return normalizeCellValue(/** @type {{ result?: unknown }} */ (value).result);
-  }
+  if (typeof value === 'boolean') return value ? 'TRUE' : 'FALSE';
   if (value instanceof Date && !Number.isNaN(value.getTime())) {
     return value.toISOString().slice(0, 10);
   }
+  if (typeof value === 'object') {
+    const obj = /** @type {Record<string, unknown>} */ (value);
+    if (Array.isArray(obj.richText)) {
+      return obj.richText.map((part) => String(part?.text ?? '')).join('').trim();
+    }
+    if ('text' in obj) return String(obj.text ?? '').trim();
+    if ('result' in obj) return normalizeCellValue(obj.result);
+    if ('error' in obj) return String(obj.error ?? '').trim();
+  }
   return String(value).trim();
+}
+
+/** @param {unknown} value */
+function deepCloneJson(value) {
+  try {
+    return JSON.parse(JSON.stringify(value));
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * 셀 서식을 참조 공유 없이 복사합니다. (ExcelJS 공유 스타일 부작용 방지)
+ * @param {import('exceljs').Cell} source
+ * @param {import('exceljs').Cell} target
+ */
+function copyCellStyle(source, target) {
+  if (source.numFmt) target.numFmt = source.numFmt;
+  if (source.font) {
+    const font = deepCloneJson(source.font);
+    if (font) target.font = font;
+  }
+  if (source.alignment) {
+    const alignment = deepCloneJson(source.alignment);
+    if (alignment) target.alignment = alignment;
+  }
+  if (source.border) {
+    const border = deepCloneJson(source.border);
+    if (border) target.border = border;
+  }
+  const fill = source.fill;
+  if (fill && fill.type === 'pattern' && fill.pattern && fill.pattern !== 'none') {
+    const cloned = deepCloneJson(fill);
+    if (cloned) target.fill = cloned;
+  } else if (fill && fill.type === 'gradient') {
+    const cloned = deepCloneJson(fill);
+    if (cloned) target.fill = cloned;
+  }
+  if (source.protection) {
+    const protection = deepCloneJson(source.protection);
+    if (protection) target.protection = protection;
+  }
 }
 
 function colLetter(index1) {
@@ -398,11 +453,7 @@ function copyWorksheet(source, targetWb, title) {
     row.eachCell({ includeEmpty: true }, (cell, colNumber) => {
       const outCell = outRow.getCell(colNumber);
       outCell.value = cell.value;
-      try {
-        outCell.style = JSON.parse(JSON.stringify(cell.style ?? {}));
-      } catch {
-        if (cell.numFmt) outCell.numFmt = cell.numFmt;
-      }
+      copyCellStyle(cell, outCell);
     });
   });
 
@@ -447,19 +498,45 @@ function rowsToWorksheet(rows, targetWb, title) {
  * @param {(pct: number, message: string) => void} [onProgress]
  * @param {number} [progressBase]
  * @param {number} [progressSpan]
+ * @param {{ resolveOpenXml?: (p: string) => Promise<string> }} [convert]
  */
-async function addSheetFromFile(filePath, sheetIndex, targetWb, title, onProgress, progressBase = 0, progressSpan = 20) {
-  const ext = extOf(filePath);
+async function addSheetFromFile(
+  filePath,
+  sheetIndex,
+  targetWb,
+  title,
+  onProgress,
+  progressBase = 0,
+  progressSpan = 20,
+  convert = undefined,
+) {
   report(onProgress, progressBase, `${title} 시트 준비…`);
-  if (OPENXML.has(ext)) {
+  let openPath = filePath;
+  let usedLegacyConvert = false;
+  if (!OPENXML.has(extOf(filePath)) && convert?.resolveOpenXml) {
+    report(onProgress, progressBase + progressSpan * 0.2, `${title}: 서식 유지 변환…`);
+    const resolved = await convert.resolveOpenXml(filePath);
+    if (resolved && OPENXML.has(extOf(resolved)) && resolved !== filePath) {
+      openPath = resolved;
+      usedLegacyConvert = true;
+    }
+  }
+
+  if (OPENXML.has(extOf(openPath))) {
     const wb = new ExcelJS.Workbook();
-    await wb.xlsx.readFile(filePath);
+    await wb.xlsx.readFile(openPath);
     const sheet = wb.worksheets[sheetIndex] ?? wb.worksheets[0];
     if (!sheet) throw new Error(`${path.basename(filePath)} 에 시트가 없습니다.`);
     const copied = copyWorksheet(sheet, targetWb, title);
-    report(onProgress, progressBase + progressSpan, `${title} 시트 복사 완료`);
+    report(
+      onProgress,
+      progressBase + progressSpan,
+      usedLegacyConvert ? `${title} 시트 복사 완료 (서식 유지)` : `${title} 시트 복사 완료`,
+    );
     return copied;
   }
+
+  // Excel COM 변환 실패 시 값만 이전
   const rows = readSheetRows(filePath, sheetIndex);
   const copied = rowsToWorksheet(rows, targetWb, title);
   report(onProgress, progressBase + progressSpan, `${title} 시트 변환 완료 (값 위주)`);
@@ -479,6 +556,36 @@ async function addSheetFromFile(filePath, sheetIndex, targetWb, title, onProgres
  *   onProgress?: (pct: number, message: string) => void,
  * }} opts
  */
+/**
+ * 사용 범위에 진한 회색 실선 테두리를 넣습니다.
+ * @param {import('exceljs').Worksheet} sheet
+ */
+function applyGridBorders(sheet) {
+  let maxRow = 0;
+  let maxCol = 0;
+  sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    maxRow = Math.max(maxRow, rowNumber);
+    row.eachCell({ includeEmpty: false }, (_cell, colNumber) => {
+      maxCol = Math.max(maxCol, colNumber);
+    });
+  });
+  if (maxRow < 1 || maxCol < 1) return;
+
+  for (let r = 1; r <= maxRow; r += 1) {
+    const excelRow = sheet.getRow(r);
+    for (let c = 1; c <= maxCol; c += 1) {
+      const cell = excelRow.getCell(c);
+      // 칸마다 새 객체 — ExcelJS 공유 스타일로 테두리가 섞이지 않게
+      cell.border = {
+        top: { style: 'thin', color: { argb: GRID_BORDER_ARGB } },
+        left: { style: 'thin', color: { argb: GRID_BORDER_ARGB } },
+        bottom: { style: 'thin', color: { argb: GRID_BORDER_ARGB } },
+        right: { style: 'thin', color: { argb: GRID_BORDER_ARGB } },
+      };
+    }
+  }
+}
+
 function applyHighlights(sheet, opts) {
   const {
     headerRow,
@@ -510,14 +617,12 @@ function applyHighlights(sheet, opts) {
     if (shouldHighlight(value, originalValues, mode, matchKind)) {
       for (const c of cols) {
         const cell = excelRow.getCell(c);
-        const style = { ...(cell.style || {}) };
-        style.fill = {
+        // style 객체 공유·shallow copy 를 피하고 fill 만 새로 지정 (Excel에서 배경이 빠지는 문제 방지)
+        cell.fill = {
           type: 'pattern',
           pattern: 'solid',
           fgColor: { argb },
-          bgColor: { argb },
         };
-        cell.style = style;
       }
       highlighted += 1;
     }
@@ -600,56 +705,89 @@ export async function runCompare(options) {
   }
   report(onProgress, 20, `원본 키 ${originalValues.size}개 (스캔 ${originalScanned}, 빈칸 제외 ${originalSkipped})`);
 
-  const outWb = new ExcelJS.Workbook();
-  outWb.creator = 'All Tools for Work';
-  outWb.created = new Date();
+  const legacyCache = createLegacyConvertCache();
+  try {
+    if (isLegacyExcelPath(comparePath) || isLegacyExcelPath(originalPath)) {
+      report(onProgress, 22, '레거시 Excel 서식 변환 준비…');
+    }
 
-  await addSheetFromFile(originalPath, originalSheetIndex, outWb, SHEET_ORIGINAL, onProgress, 25, 15);
-  await addSheetFromFile(comparePath, compareSheetIndex, outWb, SHEET_COMPARE, onProgress, 40, 15);
-  const resultSheet = await addSheetFromFile(
-    comparePath,
-    compareSheetIndex,
-    outWb,
-    SHEET_RESULT,
-    onProgress,
-    55,
-    15,
-  );
+    const outWb = new ExcelJS.Workbook();
+    outWb.creator = 'All In One Tools';
+    outWb.created = new Date();
 
-  report(onProgress, 70, '결과 시트 하이라이트…');
-  const { highlighted, total, skippedEmpty } = applyHighlights(resultSheet, {
-    headerRow: compareHeaderRow,
-    cols: compareCols,
-    originalValues,
-    mode,
-    matchKind,
-    skipEmpty,
-    colorKey: color,
-    onProgress,
-  });
+    // 시트 순서: 결과 → 원본 → 비교 (.xls 등은 Excel COM 으로 서식 유지 변환 후 복사)
+    const resultSheet = await addSheetFromFile(
+      comparePath,
+      compareSheetIndex,
+      outWb,
+      SHEET_RESULT,
+      onProgress,
+      25,
+      15,
+      legacyCache,
+    );
+    await addSheetFromFile(
+      originalPath,
+      originalSheetIndex,
+      outWb,
+      SHEET_ORIGINAL,
+      onProgress,
+      40,
+      15,
+      legacyCache,
+    );
+    await addSheetFromFile(
+      comparePath,
+      compareSheetIndex,
+      outWb,
+      SHEET_COMPARE,
+      onProgress,
+      55,
+      15,
+      legacyCache,
+    );
 
-  report(onProgress, 92, '결과 파일 저장…');
-  fs.mkdirSync(path.dirname(outputPath), { recursive: true });
-  await outWb.xlsx.writeFile(outputPath);
-  report(onProgress, 100, '완료');
+    report(onProgress, 70, '결과 시트 하이라이트…');
+    const { highlighted, total, skippedEmpty } = applyHighlights(resultSheet, {
+      headerRow: compareHeaderRow,
+      cols: compareCols,
+      originalValues,
+      mode,
+      matchKind,
+      skipEmpty,
+      colorKey: color,
+      onProgress,
+    });
 
-  return {
-    outputPath,
-    highlighted,
-    total,
-    skippedEmpty,
-    originalValueCount: originalValues.size,
-    originalScanned,
-    originalSkippedEmpty: originalSkipped,
-    mode,
-    matchKind,
-    skipEmpty,
-    color,
-    originalCols,
-    compareCols,
-    legacyOriginal: isLegacyFormat(originalPath),
-    legacyCompare: isLegacyFormat(comparePath),
-  };
+    // 격자 테두리는 결과 시트에만 — 원본·비교 시트는 소스 파일 서식 유지
+    report(onProgress, 88, '결과 시트 테두리…');
+    applyGridBorders(resultSheet);
+
+    report(onProgress, 92, '결과 파일 저장…');
+    fs.mkdirSync(path.dirname(outputPath), { recursive: true });
+    await outWb.xlsx.writeFile(outputPath);
+    report(onProgress, 100, '완료');
+
+    return {
+      outputPath,
+      highlighted,
+      total,
+      skippedEmpty,
+      originalValueCount: originalValues.size,
+      originalScanned,
+      originalSkippedEmpty: originalSkipped,
+      mode,
+      matchKind,
+      skipEmpty,
+      color,
+      originalCols,
+      compareCols,
+      legacyOriginal: isLegacyFormat(originalPath),
+      legacyCompare: isLegacyFormat(comparePath),
+    };
+  } finally {
+    legacyCache.cleanup();
+  }
 }
 
 /** @param {string} comparePath */

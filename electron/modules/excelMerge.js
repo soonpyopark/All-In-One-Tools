@@ -1,5 +1,5 @@
 /**
- * 엑셀 문서 병합 API.
+ * 엑셀 파일 병합 API.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -25,6 +25,7 @@ import {
   SHEET_SCOPE_FIRST,
   detectHeaderFromFile,
   detectKeyRangeFromFile,
+  inspectExcelFileSheets,
   isExcelFile,
   resolveOutputPath,
   runExcelMerge,
@@ -90,7 +91,7 @@ function normalizeMode(raw) {
  * @param {unknown} raw
  */
 function normalizeSheetScope(raw) {
-  return raw === SHEET_SCOPE_ALL ? SHEET_SCOPE_ALL : SHEET_SCOPE_FIRST;
+  return raw === SHEET_SCOPE_FIRST ? SHEET_SCOPE_FIRST : SHEET_SCOPE_ALL;
 }
 
 /**
@@ -144,8 +145,8 @@ export function register() {
       },
     ],
     sheetScopes: [
-      { id: SHEET_SCOPE_FIRST, label: '각 파일의 첫 시트만' },
       { id: SHEET_SCOPE_ALL, label: '각 파일의 모든 시트' },
+      { id: SHEET_SCOPE_FIRST, label: '각 파일의 첫 시트만' },
     ],
     sheetNameModes: [
       { id: NAME_FILE, label: '파일 이름' },
@@ -186,6 +187,18 @@ export function register() {
       throw new ApiError('첫 번째 Excel 파일을 확인해 주세요.');
     }
     return detectKeyRangeFromFile(filePath);
+  });
+
+  defineApi('excelMerge.inspectFile', (body) => {
+    const filePath = path.resolve(String(body?.path ?? '').trim());
+    if (!filePath || !isExcelFile(filePath) || !fs.existsSync(filePath)) {
+      throw new ApiError('Excel 파일을 확인해 주세요.');
+    }
+    try {
+      return inspectExcelFileSheets(filePath);
+    } catch (err) {
+      throw new ApiError(err instanceof Error ? err.message : '파일을 읽지 못했습니다.');
+    }
   });
 
   defineApi('excelMerge.resolveOutput', (body) => {

@@ -576,7 +576,7 @@ export default function ExcelComparePage({ featureId }) {
           <h1 className="m-0 text-xl font-semibold text-slate-900">엑셀(Excel) 비교</h1>
           <p className="mt-1 text-sm leading-relaxed text-slate-500">
             시트·헤더·다중 컬럼 키로 비교하고, 결과 시트에 배경색으로 표시합니다. 저장 파일은{' '}
-            <code className={codeClass}>원본 / 비교 / 결과</code> 세 시트입니다.
+            <code className={codeClass}>결과 / 원본 / 비교</code> 세 시트입니다.
           </p>
         </header>
 
@@ -601,7 +601,7 @@ export default function ExcelComparePage({ featureId }) {
           </div>
           {(originalLegacy || compareLegacy) && (
             <p className="mt-3 m-0 rounded-md border border-amber-200 bg-amber-50 px-3 py-2 text-xs text-amber-800">
-              .xls / .xlsb 는 값 위주로 결과 시트에 옮깁니다. 서식 유지가 필요하면 .xlsx 로 저장한 뒤 비교하세요.
+              .xls / .xlsb 는 PC에 Excel이 있으면 서식을 유지해 옮깁니다. Excel이 없으면 값 위주로만 옮겨질 수 있습니다.
             </p>
           )}
         </Section>

@@ -184,7 +184,10 @@ export function register() {
             `완료: 하이라이트 ${result.highlighted}/${result.total}행 · 원본 키 ${result.originalValueCount}개`,
           );
           if (result.legacyOriginal || result.legacyCompare) {
-            pushJobLog(j, '참고: .xls/.xlsb 는 값 위주로 옮겨져 일부 서식이 빠질 수 있습니다.');
+            pushJobLog(
+              j,
+              '참고: .xls/.xlsb 는 Excel이 설치되어 있으면 서식을 유지해 옮기고, 없으면 값 위주로 옮깁니다.',
+            );
           }
         })
         .catch((err) => {

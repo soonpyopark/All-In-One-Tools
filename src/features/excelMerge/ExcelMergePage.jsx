@@ -21,7 +21,7 @@ import HeaderRangeInputs from '../../components/common/HeaderRangeInputs.jsx';
 import { openLocalFile } from '../../lib/openLocalFile.js';
 import { showExportDone } from '../../lib/exportDone.jsx';
 
-const TITLE = '엑셀 문서 병합';
+const TITLE = '엑셀 파일 병합';
 const EXCEL_EXTS = ['.xlsx', '.xlsm', '.xltx', '.xltm', '.xls', '.xlt', '.xlsb'];
 
 const FALLBACK_MODES = [
@@ -62,10 +62,45 @@ const FALLBACK_NAMED_ACTIONS = [
   { id: 'append', label: '아래로 이어 붙이기' },
 ];
 
+/**
+ * @typedef {{
+ *   status: 'loading' | 'ready' | 'error',
+ *   sheetCount?: number,
+ *   totalRows?: number,
+ *   firstSheetRows?: number,
+ *   firstSheetColumns?: number,
+ *   sheets?: { name: string, rowCount: number, columnCount: number }[],
+ *   error?: string,
+ * }} FileSheetInfo
+ */
+
 function fileName(filePath) {
   const normalized = String(filePath ?? '').replace(/\\/g, '/');
   const parts = normalized.split('/');
   return parts[parts.length - 1] || filePath;
+}
+
+/**
+ * @param {FileSheetInfo | undefined} info
+ * @param {string} mode
+ * @param {'first' | 'all'} sheetScope
+ */
+function fileSheetSummary(info, mode, sheetScope) {
+  if (!info || info.status === 'loading') return '…';
+  if (info.status === 'error') return '읽기 실패';
+  const sheetCount = info.sheetCount ?? 0;
+  const firstRows = info.firstSheetRows ?? 0;
+  const firstCols = info.firstSheetColumns ?? 0;
+  const totalRows = info.totalRows ?? 0;
+  const preferFirst =
+    mode === 'join' ||
+    ((mode === 'sheets' || mode === 'append' || mode === 'folder') && sheetScope === 'first');
+  if (preferFirst) {
+    return sheetCount <= 1
+      ? `${firstRows}행 · ${firstCols}열`
+      : `시트 ${sheetCount} · 첫 ${firstRows}행 · ${firstCols}열`;
+  }
+  return `시트 ${sheetCount} · 합계 ${totalRows}행`;
 }
 
 /**
@@ -96,11 +131,14 @@ export default function ExcelMergePage() {
   const native = getNative();
   const [paths, setPaths] = useState(/** @type {string[]} */ ([]));
   const [selected, setSelected] = useState(/** @type {string | null} */ (null));
+  /** @type {[Record<string, FileSheetInfo>, Function]} */
+  const [fileInfos, setFileInfos] = useState(/** @type {Record<string, FileSheetInfo>} */ ({}));
+  const [expandedPaths, setExpandedPaths] = useState(/** @type {Record<string, boolean>} */ ({}));
   const [outputName, setOutputName] = useState('병합');
   const [outputDir, setOutputDir] = useState('');
   const [includeSub, setIncludeSub] = useState(false);
   const [mode, setMode] = useState('sheets');
-  const [sheetScope, setSheetScope] = useState(/** @type {'first' | 'all'} */ ('first'));
+  const [sheetScope, setSheetScope] = useState(/** @type {'first' | 'all'} */ ('all'));
   const [sheetNameMode, setSheetNameMode] = useState(
     /** @type {'file' | 'sheet' | 'file_sheet'} */ ('file'),
   );
@@ -214,6 +252,79 @@ export default function ExcelMergePage() {
       alive = false;
     };
   }, [firstPath]);
+
+  // 목록에 새로 들어온 파일의 시트·행·열 수를 백그라운드로 읽습니다.
+  const fileInfoCacheRef = useRef(/** @type {Record<string, FileSheetInfo>} */ ({}));
+  useEffect(() => {
+    const keep = new Set(paths);
+    /** @type {Record<string, FileSheetInfo>} */
+    const nextCache = {};
+    for (const [key, value] of Object.entries(fileInfoCacheRef.current)) {
+      if (keep.has(key)) nextCache[key] = value;
+    }
+    const queue = paths.filter((item) => {
+      const cur = nextCache[item];
+      return !cur || (cur.status !== 'ready' && cur.status !== 'error');
+    });
+    for (const item of queue) {
+      nextCache[item] = { status: 'loading' };
+    }
+    fileInfoCacheRef.current = nextCache;
+    setFileInfos({ ...nextCache });
+    setExpandedPaths((prev) => {
+      /** @type {Record<string, boolean>} */
+      const next = {};
+      let changed = false;
+      for (const [key, value] of Object.entries(prev)) {
+        if (!keep.has(key)) {
+          changed = true;
+          continue;
+        }
+        next[key] = value;
+      }
+      return changed ? next : prev;
+    });
+
+    if (queue.length === 0) return undefined;
+    let alive = true;
+    void (async () => {
+      for (const item of queue) {
+        if (!alive) return;
+        try {
+          const res = await api('excelMerge.inspectFile', { path: item });
+          if (!alive) return;
+          const sheets = Array.isArray(res?.sheets)
+            ? res.sheets.map((sheet) => ({
+                name: String(sheet?.name ?? 'Sheet'),
+                rowCount: Number(sheet?.rowCount) || 0,
+                columnCount: Number(sheet?.columnCount) || 0,
+              }))
+            : [];
+          const info = {
+            status: /** @type {const} */ ('ready'),
+            sheetCount: Number(res?.sheetCount) || 0,
+            totalRows: Number(res?.totalRows) || 0,
+            firstSheetRows: Number(res?.firstSheetRows) || 0,
+            firstSheetColumns: Number(res?.firstSheetColumns) || sheets[0]?.columnCount || 0,
+            sheets,
+          };
+          fileInfoCacheRef.current = { ...fileInfoCacheRef.current, [item]: info };
+          setFileInfos((prev) => ({ ...prev, [item]: info }));
+        } catch (err) {
+          if (!alive) return;
+          const info = {
+            status: /** @type {const} */ ('error'),
+            error: err instanceof Error ? err.message : '읽기 실패',
+          };
+          fileInfoCacheRef.current = { ...fileInfoCacheRef.current, [item]: info };
+          setFileInfos((prev) => ({ ...prev, [item]: info }));
+        }
+      }
+    })();
+    return () => {
+      alive = false;
+    };
+  }, [paths.join('\0')]);
 
   const mergePaths = (nextPaths) => {
     const list = (Array.isArray(nextPaths) ? nextPaths : [])
@@ -527,6 +638,9 @@ export default function ExcelMergePage() {
                 onClick={() => {
                   setPaths([]);
                   setSelected(null);
+                  setFileInfos({});
+                  setExpandedPaths({});
+                  fileInfoCacheRef.current = {};
                 }}
               >
                 목록 비우기
@@ -542,35 +656,79 @@ export default function ExcelMergePage() {
               />
             </div>
             <p className="mt-2 text-xs text-slate-500">
-              {paths.length}개 · 결과는 .xlsx 로 저장됩니다 · 더블클릭하면 연결된 프로그램으로 엽니다
+              {paths.length}개 · 결과는 .xlsx · 더블클릭으로 열기 · ▸ 로 시트별 행·열 수
             </p>
             {paths.length > 0 ? (
-              <ul className="mt-3 max-h-56 overflow-auto rounded-lg border border-slate-200 divide-y divide-slate-100 bg-white">
+              <ul className="mt-3 max-h-72 overflow-auto rounded-lg border border-slate-200 divide-y divide-slate-100 bg-white">
                 {paths.map((item, index) => {
                   const active = selected === item;
+                  const info = fileInfos[item];
+                  const expanded = Boolean(expandedPaths[item]);
+                  const canExpand = info?.status === 'ready' && (info.sheets?.length ?? 0) > 0;
+                  const summary = fileSheetSummary(info, mode, sheetScope);
                   return (
-                    <li key={item}>
-                      <button
-                        type="button"
-                        className={`flex w-full items-center gap-2 px-3 py-1.5 text-left text-sm transition-colors ${
-                          active ? 'bg-app-accent/10 text-slate-900' : 'text-slate-700 hover:bg-slate-50'
-                        }`}
-                        disabled={busy}
-                        onClick={() => setSelected(item)}
-                        onDoubleClick={() => {
-                          void openLocalFile(item).catch((err) => {
-                            void dialog.alert({
-                              title: TITLE,
-                              body: err instanceof Error ? err.message : '파일을 열지 못했습니다.',
+                    <li key={item} className={active ? 'bg-app-accent/10' : ''}>
+                      <div className="flex w-full items-center gap-1 px-2 py-1.5 text-sm">
+                        <button
+                          type="button"
+                          className={`flex h-7 w-7 shrink-0 items-center justify-center rounded text-slate-400 transition hover:bg-slate-100 hover:text-slate-700 disabled:opacity-40 ${
+                            expanded ? 'text-slate-700' : ''
+                          }`}
+                          disabled={busy || !canExpand}
+                          aria-label={expanded ? '시트 상세 접기' : '시트 상세 펼치기'}
+                          aria-expanded={expanded}
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            if (!canExpand) return;
+                            setExpandedPaths((prev) => ({ ...prev, [item]: !prev[item] }));
+                          }}
+                        >
+                          <span className="text-xs" aria-hidden="true">
+                            {expanded ? '▾' : '▸'}
+                          </span>
+                        </button>
+                        <button
+                          type="button"
+                          className={`flex min-w-0 flex-1 items-center gap-2 rounded px-1 py-0.5 text-left transition-colors ${
+                            active ? 'text-slate-900' : 'text-slate-700 hover:bg-slate-50'
+                          }`}
+                          disabled={busy}
+                          onClick={() => setSelected(item)}
+                          onDoubleClick={() => {
+                            void openLocalFile(item).catch((err) => {
+                              void dialog.alert({
+                                title: TITLE,
+                                body: err instanceof Error ? err.message : '파일을 열지 못했습니다.',
+                              });
                             });
-                          });
-                        }}
-                      >
-                        <span className="w-6 shrink-0 text-xs text-slate-400">{index + 1}</span>
-                        <span className="min-w-0 flex-1 truncate" title={item}>
-                          {fileName(item)}
-                        </span>
-                      </button>
+                          }}
+                        >
+                          <span className="w-6 shrink-0 text-xs text-slate-400">{index + 1}</span>
+                          <span className="min-w-0 flex-1 truncate" title={item}>
+                            {fileName(item)}
+                          </span>
+                          <span
+                            className="shrink-0 text-[11px] tabular-nums text-slate-500"
+                            title={info?.status === 'error' ? info.error : summary}
+                          >
+                            {summary}
+                          </span>
+                        </button>
+                      </div>
+                      {expanded && info?.status === 'ready' && info.sheets?.length ? (
+                        <ul className="mb-2 ml-10 mr-3 space-y-0.5 rounded-md bg-slate-50 px-2.5 py-1.5 text-[11px] text-slate-600">
+                          {info.sheets.map((sheet, sheetIndex) => (
+                            <li key={`${item}:${sheet.name}:${sheetIndex}`} className="flex justify-between gap-3">
+                              <span className="min-w-0 truncate" title={sheet.name}>
+                                {sheetIndex + 1}. {sheet.name}
+                              </span>
+                              <span className="shrink-0 tabular-nums text-slate-500">
+                                {sheet.rowCount}행 · {sheet.columnCount ?? 0}열
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      ) : null}
                     </li>
                   );
                 })}
@@ -665,8 +823,8 @@ export default function ExcelMergePage() {
                   <Field label="가져올 시트">
                     <div className="flex flex-wrap items-center gap-x-4 gap-y-2" role="radiogroup" aria-label="가져올 시트">
                       {(meta?.sheetScopes ?? [
-                        { id: 'first', label: '각 파일의 첫 시트만' },
                         { id: 'all', label: '각 파일의 모든 시트' },
+                        { id: 'first', label: '각 파일의 첫 시트만' },
                       ]).map((item) => (
                         <label
                           key={item.id}

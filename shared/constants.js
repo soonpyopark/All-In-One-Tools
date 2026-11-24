@@ -29,7 +29,7 @@ export const APP_FILE_NAME = 'AllTools';
  * - Git 태그·GitHub Release: `v1.0.1-N`  (하이픈) ← `APP_GIT_TAG`
  * - `package.json` version: `1.0.1-N`  (electron-builder semver)
  */
-export const APP_VERSION = '1.0.2.1';
+export const APP_VERSION = '1.0.2.2';
 
 /**
  * Git 태그 문자열. `1.0.1.5` → `v1.0.1-5`
@@ -51,7 +51,7 @@ export const APP_GIT_TAG = formatAppGitTag(APP_VERSION);
  * Package build id (YYMMDD_HHMMSS). Rewritten by `npm run build:release*`
  * (scripts/sync-build-stamp.mjs); matches the suffix of the produced files.
  */
-export const APP_BUILD_STAMP = '261123_233613';
+export const APP_BUILD_STAMP = '261124_100310';
 
 /**
  * GitHub repository (`owner/repo`) whose latest release is used by the

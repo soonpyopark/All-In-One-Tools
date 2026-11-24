@@ -1,5 +1,5 @@
 /**
- * 한글 문서(HWP/HWPX) 병합 — Windows + 한컴 한글 COM.
+ * 한글 파일(HWP/HWPX) 병합 — Windows + 한컴 한글 COM.
  */
 import fs from 'node:fs';
 import path from 'node:path';
@@ -95,7 +95,7 @@ export function register() {
 
     const paths = normalizePaths(body?.paths);
     if (paths.length < 2) {
-      throw new ApiError('병합하려면 한글 문서가 2개 이상 필요합니다.');
+      throw new ApiError('병합하려면 한글 파일이 2개 이상 필요합니다.');
     }
 
     const outputName = sanitizeMergeName(body?.outputName);

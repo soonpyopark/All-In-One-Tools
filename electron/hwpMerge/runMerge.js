@@ -88,7 +88,7 @@ export function runHangulMerge(options) {
     .map((item) => String(item ?? '').trim())
     .filter(Boolean);
   if (paths.length < 2) {
-    return Promise.reject(new Error('병합하려면 한글 문서가 2개 이상 필요합니다.'));
+    return Promise.reject(new Error('병합하려면 한글 파일이 2개 이상 필요합니다.'));
   }
   for (const item of paths) {
     if (!isHangulDoc(item)) {

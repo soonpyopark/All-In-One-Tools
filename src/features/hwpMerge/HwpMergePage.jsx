@@ -13,7 +13,7 @@ import { api, getNative } from '../../lib/apiClient.js';
 import { openLocalFile } from '../../lib/openLocalFile.js';
 import { showExportDone } from '../../lib/exportDone.jsx';
 
-const TITLE = '한글 문서 병합';
+const TITLE = '한글 파일 병합';
 const HWP_EXTS = ['.hwp', '.hwpx'];
 
 function fileName(filePath) {
@@ -116,9 +116,9 @@ export default function HwpMergePage() {
     if (!native?.pickOpenFiles) return;
     const result = await native.pickOpenFiles({
       memoryKey: 'hwpMergeInput',
-      title: '병합할 한글 문서 선택',
+      title: '병합할 한글 파일 선택',
       multi: true,
-      filters: [{ name: '한글 문서', extensions: ['hwp', 'hwpx'] }],
+      filters: [{ name: '한글 파일', extensions: ['hwp', 'hwpx'] }],
     });
     if (result?.canceled || !result?.paths?.length) return;
     await addPaths(result.paths);
@@ -128,7 +128,7 @@ export default function HwpMergePage() {
     if (!native?.pickDirectory) return;
     const picked = await native.pickDirectory({
       memoryKey: 'hwpMergeInput',
-      title: '한글 문서가 있는 폴더 선택',
+      title: '한글 파일이 있는 폴더 선택',
     });
     if (picked?.canceled || !picked?.path) return;
     await addPaths([picked.path]);
@@ -181,7 +181,7 @@ export default function HwpMergePage() {
 
   const run = async () => {
     if (paths.length < 2) {
-      void dialog.alert({ title: TITLE, body: '병합하려면 한글 문서를 2개 이상 추가하세요.' });
+      void dialog.alert({ title: TITLE, body: '병합하려면 한글 파일을 2개 이상 추가하세요.' });
       return;
     }
     if (available && !available.installed) {
@@ -261,7 +261,7 @@ export default function HwpMergePage() {
         <section>
           <h1 className="m-0 text-xl font-semibold text-slate-900">{TITLE}</h1>
           <p className="mt-1 text-sm text-slate-500">
-            HWP·HWPX 파일을 순서대로 하나의 한글 문서로 합칩니다. (Windows · 한컴 한글 필요)
+            HWP·HWPX 파일을 순서대로 하나의 한글 파일로 합칩니다. (Windows · 한컴 한글 필요)
           </p>
           <p className="mt-1.5 text-sm text-slate-500">{hangulHint}</p>
         </section>
@@ -269,7 +269,7 @@ export default function HwpMergePage() {
         <Section title="파일" description="위쪽이 앞쪽입니다. 순서를 바꾼 뒤 병합하세요.">
           <InputDropZone
             disabled={busy}
-            emptyHint="놓으면 한글 문서 목록에 추가됩니다"
+            emptyHint="놓으면 한글 파일 목록에 추가됩니다"
             onPaths={(next) => void addPaths(next)}
             onUnsupported={() =>
               void dialog.alert({

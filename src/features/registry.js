@@ -105,7 +105,7 @@ export const FEATURES = [
   },
   {
     id: 'excel-merge',
-    label: '엑셀 문서 병합',
+    label: '엑셀 파일 병합',
     icon: '📗',
     description:
       '여러 Excel 파일을 시트로 모으거나, 하나의 시트에 아래로 이어 붙여 .xlsx 로 저장합니다.',
@@ -114,9 +114,9 @@ export const FEATURES = [
   },
   {
     id: 'hwp-merge',
-    label: '한글 문서 병합',
+    label: '한글 파일 병합',
     icon: '📑',
-    description: 'HWP·HWPX를 순서대로 하나의 한글 문서로 합칩니다. 용지 방향(세로/가로)은 문서별로 유지됩니다. (Windows · 한컴 한글 필요)',
+    description: 'HWP·HWPX를 순서대로 하나의 한글 파일로 합칩니다. 용지 방향(세로/가로)은 파일별로 유지됩니다. (Windows · 한컴 한글 필요)',
     color: ['#38bdf8', '#0369a1'],
     platforms: ['win32'],
     component: HwpMergePage,

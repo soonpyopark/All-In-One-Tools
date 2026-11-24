@@ -356,6 +356,38 @@ function matchSheetNames(sheetNames, filters) {
   return out;
 }
 
+/** 병합 결과 기본 격자 테두리 (진한 회색 실선) */
+const GRID_BORDER_ARGB = 'FF595959';
+
+/**
+ * 사용 범위에 진한 회색 실선 테두리를 넣습니다.
+ * @param {import('exceljs').Worksheet} sheet
+ */
+function applyGridBorders(sheet) {
+  let maxRow = 0;
+  let maxCol = 0;
+  sheet.eachRow({ includeEmpty: false }, (row, rowNumber) => {
+    maxRow = Math.max(maxRow, rowNumber);
+    row.eachCell({ includeEmpty: false }, (_cell, colNumber) => {
+      maxCol = Math.max(maxCol, colNumber);
+    });
+  });
+  if (maxRow < 1 || maxCol < 1) return;
+
+  for (let r = 1; r <= maxRow; r += 1) {
+    const excelRow = sheet.getRow(r);
+    for (let c = 1; c <= maxCol; c += 1) {
+      const cell = excelRow.getCell(c);
+      cell.border = {
+        top: { style: 'thin', color: { argb: GRID_BORDER_ARGB } },
+        left: { style: 'thin', color: { argb: GRID_BORDER_ARGB } },
+        bottom: { style: 'thin', color: { argb: GRID_BORDER_ARGB } },
+        right: { style: 'thin', color: { argb: GRID_BORDER_ARGB } },
+      };
+    }
+  }
+}
+
 /**
  * @param {import('exceljs').Worksheet} target
  * @param {unknown[][]} rows
@@ -700,6 +732,77 @@ export function detectKeyRangeFromFile(filePath) {
 }
 
 /**
+ * 시트의 사용 행 수 (!ref 기준). 비어 있으면 0.
+ * @param {import('xlsx').WorkSheet | undefined} sheet
+ */
+function sheetUsedRowCount(sheet) {
+  if (!sheet) return 0;
+  const ref = sheet['!ref'];
+  if (!ref || typeof ref !== 'string') return 0;
+  try {
+    const range = XLSX.utils.decode_range(ref);
+    return Math.max(0, range.e.r - range.s.r + 1);
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * 시트의 사용 열 수 (!ref 기준). 비어 있으면 0.
+ * @param {import('xlsx').WorkSheet | undefined} sheet
+ */
+function sheetUsedColumnCount(sheet) {
+  if (!sheet) return 0;
+  const ref = sheet['!ref'];
+  if (!ref || typeof ref !== 'string') return 0;
+  try {
+    const range = XLSX.utils.decode_range(ref);
+    return Math.max(0, range.e.c - range.s.c + 1);
+  } catch {
+    return 0;
+  }
+}
+
+/**
+ * 파일 목록용: 시트 이름·행·열 수 요약.
+ * @param {string} filePath
+ * @returns {{
+ *   path: string,
+ *   sheetCount: number,
+ *   totalRows: number,
+ *   firstSheetRows: number,
+ *   firstSheetColumns: number,
+ *   sheets: { name: string, rowCount: number, columnCount: number }[],
+ * }}
+ */
+export function inspectExcelFileSheets(filePath) {
+  const resolved = path.resolve(String(filePath ?? '').trim());
+  if (!resolved || !isExcelFile(resolved) || !fs.existsSync(resolved)) {
+    throw new Error('Excel 파일을 확인해 주세요.');
+  }
+  const wb = readBook(resolved);
+  const names = Array.isArray(wb.SheetNames) ? wb.SheetNames : [];
+  /** @type {{ name: string, rowCount: number, columnCount: number }[]} */
+  const sheets = names.map((name) => {
+    const sheet = wb.Sheets?.[name];
+    return {
+      name: String(name || 'Sheet'),
+      rowCount: sheetUsedRowCount(sheet),
+      columnCount: sheetUsedColumnCount(sheet),
+    };
+  });
+  const totalRows = sheets.reduce((sum, item) => sum + item.rowCount, 0);
+  return {
+    path: resolved,
+    sheetCount: sheets.length,
+    totalRows,
+    firstSheetRows: sheets[0]?.rowCount ?? 0,
+    firstSheetColumns: sheets[0]?.columnCount ?? 0,
+    sheets,
+  };
+}
+
+/**
  * 키 열 기준 가로 결합 (첫 파일 기준 왼쪽 조인 + 나머지 키는 아래 추가).
  * 시작 칸=헤더 행, 그 다음~끝 행=데이터. 같은 열이 키.
  * @param {string[]} paths
@@ -866,7 +969,7 @@ export async function runExcelMerge(options) {
   }
 
   const mode = ALL_MODES.has(String(options.mode)) ? String(options.mode) : MODE_SHEETS;
-  const sheetScope = options.sheetScope === SHEET_SCOPE_ALL ? SHEET_SCOPE_ALL : SHEET_SCOPE_FIRST;
+  const sheetScope = options.sheetScope === SHEET_SCOPE_FIRST ? SHEET_SCOPE_FIRST : SHEET_SCOPE_ALL;
   const sheetNameMode =
     options.sheetNameMode === NAME_SHEET || options.sheetNameMode === NAME_FILE_SHEET
       ? options.sheetNameMode
@@ -978,6 +1081,10 @@ export async function runExcelMerge(options) {
 
   if (outWb.worksheets.length === 0) {
     throw new Error('병합할 시트가 없습니다. 시트 이름·필터를 확인해 주세요.');
+  }
+
+  for (const sheet of outWb.worksheets) {
+    applyGridBorders(sheet);
   }
 
   const outDir = path.dirname(outputPath);
