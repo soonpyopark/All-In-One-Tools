@@ -34,6 +34,7 @@ import {
   persistFloatingLauncherState,
   showFloatingLauncher,
 } from './electron/launcher/floatingWindow.js';
+import { createSplashWindow, registerSplashIpc, toggleAboutSplash } from './electron/splash.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -93,6 +94,9 @@ let mainWindow = null;
 let rendererDir = '';
 /** @type {{ close: () => Promise<void> } | null} */
 let devRenderer = null;
+/** 시작 스플래시 (메인 창이 준비되면 닫는다). */
+/** @type {ReturnType<typeof createSplashWindow> | null} */
+let splash = null;
 
 rendererDir = isDev ? path.join(__dirname, '.dev-dist') : path.join(__dirname, 'dist');
 fs.mkdirSync(storage.stateRoot, { recursive: true });
@@ -128,11 +132,14 @@ if (!acquireSingleInstanceLockIfNeeded()) {
 function fatal(error) {
   const message = error instanceof Error ? error.message : String(error);
   console.error('[fatal]', error);
+  splash?.close();
+  splash = null;
   dialog.showErrorBox(`${APP_NAME} 시작 실패`, message);
   app.exit(1);
 }
 
 async function boot() {
+  splash = createSplashWindow({ iconPath: resolveIconPath() });
   onAppReadyForTray();
 
   runtime.autoLaunch = {
@@ -240,6 +247,11 @@ function createMainWindow() {
   win.once('ready-to-show', () => {
     win.setOpacity(0);
     win.show();
+    if (splash) {
+      // 메인 창이 뜨면 최소 표시 시간(700ms)을 채운 뒤 스플래시를 닫는다.
+      splash.closeWhenReady();
+      splash = null;
+    }
     void hideTitleBarIcon(win).finally(() => {
       if (!win.isDestroyed()) win.setOpacity(1);
     });
@@ -326,6 +338,8 @@ function handleTrusted(channel, handler) {
 const senderWindow = (event) => BrowserWindow.fromWebContents(event.sender) ?? undefined;
 
 function registerIpc() {
+  registerSplashIpc();
+
   /** Backend RPC (electron/api/registry.js). Errors are returned, not thrown, so their message survives IPC. */
   ipcMain.handle('api:call', async (event, name, body) => {
     if (!isTrustedSender(event)) return { ok: false, status: 403, error: '허용되지 않은 요청입니다.' };
@@ -434,6 +448,9 @@ function registerIpc() {
     const [width, height] = win.getSize();
     return { ok: true, width, height };
   });
+
+  /** 상단 앱 이름 클릭: 스플래시 형태의 정보 창을 토글한다. */
+  handleTrusted('frame:showAboutSplash', () => toggleAboutSplash({ iconPath: resolveIconPath() }));
 }
 
 /* -------------------------------------------------------------------------- */

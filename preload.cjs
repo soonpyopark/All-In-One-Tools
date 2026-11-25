@@ -17,6 +17,8 @@ contextBridge.exposeInMainWorld('frame', {
   setAlwaysOnTop: (enabled) => ipcRenderer.invoke('frame:setAlwaysOnTop', enabled),
   /** 메인 창을 최초 실행 크기(1280×800)로 되돌립니다. */
   resetWindowSize: () => ipcRenderer.invoke('frame:resetWindowSize'),
+  /** 앱 정보 스플래시(시작 화면과 같은 형태)를 토글합니다. */
+  showAboutSplash: () => ipcRenderer.invoke('frame:showAboutSplash'),
   /**
    * 플로팅 런처에서 편집 요청이 오면 콜백 호출.
    * @param {(payload: { id: string }) => void} handler

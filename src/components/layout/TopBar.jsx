@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAppInfo } from '../../context/AppInfoContext.jsx';
 import { useDialog } from '../../context/DialogContext.jsx';
+import { getNative } from '../../lib/apiClient.js';
 import { openExternalUrl } from '../../lib/openExternal.js';
 import { runUpdateCheck } from '../../lib/updateCheckUi.js';
 import AppLogo from '../common/AppLogo.jsx';
@@ -71,6 +72,7 @@ function UpdateCheckIcon() {
 export default function TopBar({ settingsOpen, onToggleSettings, onGoHome }) {
   const appInfo = useAppInfo();
   const dialog = useDialog();
+  const native = getNative();
   const [updateChecking, setUpdateChecking] = useState(false);
 
   const handleUpdateCheck = () => {
@@ -88,6 +90,10 @@ export default function TopBar({ settingsOpen, onToggleSettings, onGoHome }) {
   };
 
   const showAbout = () => {
+    if (typeof native?.showAboutSplash === 'function') {
+      void native.showAboutSplash();
+      return;
+    }
     void dialog.alert({
       title: appInfo.name,
       body: `버전: v${appInfo.version}\n빌드: ${appInfo.buildStampLabel}`,

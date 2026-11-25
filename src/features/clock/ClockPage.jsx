@@ -82,6 +82,9 @@ export default function ClockPage() {
   const [draftTime, setDraftTime] = useState('09:00');
   const [draftDate, setDraftDate] = useState(() => toDateInputValue());
   const [draftRepeat, setDraftRepeat] = useState(/** @type {'once' | 'daily' | 'date'} */ ('once'));
+  /** 수정 중인 알람 id. 없으면 새 알람 추가 모드. */
+  const [editingId, setEditingId] = useState(/** @type {string | null} */ (null));
+  const [editingEnabled, setEditingEnabled] = useState(true);
   const [soundPath, setSoundPath] = useState('');
   const [busy, setBusy] = useState(false);
   const [hour12, setHour12] = useState(false);
@@ -140,16 +143,37 @@ export default function ClockPage() {
     return parts[parts.length - 1] || soundPath;
   }, [soundPath]);
 
-  const addAlarm = async () => {
+  const resetDraft = () => {
+    setEditingId(null);
+    setEditingEnabled(true);
+    setDraftTitle('알람');
+    setDraftTime('09:00');
+    setDraftDate(toDateInputValue());
+    setDraftRepeat('once');
+  };
+
+  /** @param {AlarmItem} alarm */
+  const beginEditAlarm = (alarm) => {
+    setEditingId(alarm.id);
+    setEditingEnabled(alarm.enabled !== false);
+    setDraftTitle(alarm.title || '알람');
+    setDraftTime(alarm.time || '09:00');
+    setDraftRepeat(alarm.repeat || 'once');
+    setDraftDate(alarm.repeat === 'date' && alarm.date ? alarm.date : toDateInputValue());
+  };
+
+  const saveAlarm = async () => {
+    const isEdit = Boolean(editingId);
+    const dialogTitle = isEdit ? '알람 수정' : '알람 추가';
     if (draftRepeat === 'date') {
       if (!draftDate) {
-        void dialog.alert({ title: '알람 추가', body: '날짜를 선택하세요.' });
+        void dialog.alert({ title: dialogTitle, body: '날짜를 선택하세요.' });
         return;
       }
       const when = new Date(`${draftDate}T${draftTime}:00`);
       if (Number.isNaN(when.getTime()) || when.getTime() <= Date.now()) {
         void dialog.alert({
-          title: '알람 추가',
+          title: dialogTitle,
           body: '지난 일시는 등록할 수 없습니다. 미래 날짜와 시각을 선택하세요.',
         });
         return;
@@ -159,18 +183,21 @@ export default function ClockPage() {
     try {
       const res = await api('clock.alarms.upsert', {
         alarm: {
+          ...(isEdit ? { id: editingId } : {}),
           title: draftTitle.trim() || '알람',
           time: draftTime,
           date: draftRepeat === 'date' ? draftDate : null,
-          enabled: true,
+          enabled: isEdit ? editingEnabled : true,
           repeat: draftRepeat,
+          snoozeUntil: null,
         },
       });
       setAlarms(Array.isArray(res?.alarms) ? res.alarms : alarms);
+      resetDraft();
     } catch (err) {
       void dialog.alert({
-        title: '알람 추가 실패',
-        body: err instanceof Error ? err.message : '알람을 추가하지 못했습니다.',
+        title: isEdit ? '알람 수정 실패' : '알람 추가 실패',
+        body: err instanceof Error ? err.message : `알람을 ${isEdit ? '수정' : '추가'}하지 못했습니다.`,
       });
     } finally {
       setBusy(false);
@@ -202,6 +229,7 @@ export default function ClockPage() {
     try {
       const res = await api('clock.alarms.remove', { id: alarm.id });
       setAlarms(Array.isArray(res?.alarms) ? res.alarms : alarms.filter((item) => item.id !== alarm.id));
+      if (editingId === alarm.id) resetDraft();
     } catch (err) {
       void dialog.alert({
         title: '삭제 실패',
@@ -554,17 +582,30 @@ export default function ClockPage() {
                 onChange={(event) => setDraftTime(event.target.value)}
               />
             </label>
-            <button type="button" className={btnPrimaryClass} disabled={busy} onClick={() => void addAlarm()}>
-              추가
+            <button type="button" className={btnPrimaryClass} disabled={busy} onClick={() => void saveAlarm()}>
+              {editingId ? '저장' : '추가'}
             </button>
+            {editingId ? (
+              <button type="button" className={btnClass} disabled={busy} onClick={resetDraft}>
+                수정 취소
+              </button>
+            ) : null}
           </div>
+          {editingId ? (
+            <p className="mt-2 text-xs text-amber-700">목록에서 고른 알람을 수정 중입니다. 바꾼 뒤 저장하세요.</p>
+          ) : null}
 
           {sortedAlarms.length === 0 ? (
             <p className="mt-4 text-sm text-slate-500">등록된 알람이 없습니다.</p>
           ) : (
             <ul className="mt-4 divide-y divide-slate-100 rounded-lg border border-slate-200">
               {sortedAlarms.map((alarm) => (
-                <li key={alarm.id} className="flex flex-wrap items-center gap-3 px-3 py-2.5">
+                <li
+                  key={alarm.id}
+                  className={`flex flex-wrap items-center gap-3 px-3 py-2.5 ${
+                    editingId === alarm.id ? 'bg-amber-50/80' : ''
+                  }`}
+                >
                   <button
                     type="button"
                     className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
@@ -582,6 +623,14 @@ export default function ClockPage() {
                   {alarm.snoozeUntil && alarm.snoozeUntil > Date.now() ? (
                     <span className="text-xs text-amber-600">스누즈 중</span>
                   ) : null}
+                  <button
+                    type="button"
+                    className="rounded px-2 py-1 text-xs text-slate-600 hover:bg-slate-100"
+                    disabled={busy}
+                    onClick={() => beginEditAlarm(alarm)}
+                  >
+                    수정
+                  </button>
                   <button
                     type="button"
                     className="rounded px-2 py-1 text-xs text-red-500 hover:bg-red-50"
