@@ -235,6 +235,21 @@ export default function CleanupPage({ tool = 'ebook-extract', featureId } = {}) 
     });
   };
 
+  /** @param {string} target @param {'start' | 'end'} edge */
+  const movePathToEdge = (target, edge) => {
+    setInputItems((prev) => {
+      const index = prev.findIndex((item) => item.path === target);
+      if (index < 0) return prev;
+      if (edge === 'start' && index === 0) return prev;
+      if (edge === 'end' && index === prev.length - 1) return prev;
+      const next = [...prev];
+      const [item] = next.splice(index, 1);
+      if (edge === 'start') next.unshift(item);
+      else next.push(item);
+      return next;
+    });
+  };
+
   const pickOutputDir = async () => {
     if (!native?.pickDirectory) return;
     const result = await native.pickDirectory({ memoryKey: outputKey });
@@ -488,6 +503,14 @@ export default function CleanupPage({ tool = 'ebook-extract', featureId } = {}) 
                               type="button"
                               className="shrink-0 text-xs text-slate-500 hover:text-slate-800"
                               disabled={index === 0}
+                              onClick={() => movePathToEdge(item.path, 'start')}
+                            >
+                              맨위로
+                            </button>
+                            <button
+                              type="button"
+                              className="shrink-0 text-xs text-slate-500 hover:text-slate-800"
+                              disabled={index === 0}
                               onClick={() => movePath(item.path, -1)}
                             >
                               위로
@@ -499,6 +522,14 @@ export default function CleanupPage({ tool = 'ebook-extract', featureId } = {}) 
                               onClick={() => movePath(item.path, 1)}
                             >
                               아래로
+                            </button>
+                            <button
+                              type="button"
+                              className="shrink-0 text-xs text-slate-500 hover:text-slate-800"
+                              disabled={index === inputItems.length - 1}
+                              onClick={() => movePathToEdge(item.path, 'end')}
+                            >
+                              맨아래로
                             </button>
                           </>
                         ) : null}

@@ -803,6 +803,92 @@ export function inspectExcelFileSheets(filePath) {
 }
 
 /**
+ * 첨부 파일·시트별 행/열 수 요약을 .xlsx 로 저장.
+ * @param {string[]} paths
+ * @param {string} outputPath
+ * @returns {Promise<{ outputPath: string, fileCount: number, rowCount: number }>}
+ */
+export async function exportFileSheetSummary(paths, outputPath) {
+  const list = Array.isArray(paths) ? paths.map((item) => path.resolve(String(item ?? '').trim())).filter(Boolean) : [];
+  if (list.length < 1) throw new Error('내보낼 Excel 파일을 먼저 추가해 주세요.');
+  const dest = path.resolve(String(outputPath ?? '').trim());
+  if (!dest) throw new Error('저장 경로를 확인해 주세요.');
+
+  const wb = new ExcelJS.Workbook();
+  const sheet = wb.addWorksheet('파일·시트 요약');
+  sheet.columns = [
+    { header: '순번', key: 'fileIndex', width: 8 },
+    { header: '파일 이름', key: 'fileName', width: 32 },
+    { header: '파일 경로', key: 'filePath', width: 56 },
+    { header: '시트 수', key: 'sheetCount', width: 10 },
+    { header: '시트 번호', key: 'sheetIndex', width: 10 },
+    { header: '시트 이름', key: 'sheetName', width: 24 },
+    { header: '행 수', key: 'rowCount', width: 10 },
+    { header: '열 수', key: 'columnCount', width: 10 },
+    { header: '비고', key: 'note', width: 28 },
+  ];
+  const headerRow = sheet.getRow(1);
+  headerRow.font = { bold: true };
+  headerRow.alignment = { vertical: 'middle' };
+
+  let dataRows = 0;
+  for (let i = 0; i < list.length; i += 1) {
+    const filePath = list[i];
+    const base = path.basename(filePath);
+    try {
+      const info = inspectExcelFileSheets(filePath);
+      const sheets = Array.isArray(info.sheets) ? info.sheets : [];
+      if (sheets.length === 0) {
+        sheet.addRow({
+          fileIndex: i + 1,
+          fileName: base,
+          filePath,
+          sheetCount: 0,
+          sheetIndex: '',
+          sheetName: '',
+          rowCount: '',
+          columnCount: '',
+          note: '시트 없음',
+        });
+        dataRows += 1;
+        continue;
+      }
+      for (let s = 0; s < sheets.length; s += 1) {
+        const item = sheets[s];
+        sheet.addRow({
+          fileIndex: i + 1,
+          fileName: base,
+          filePath,
+          sheetCount: info.sheetCount,
+          sheetIndex: s + 1,
+          sheetName: item.name,
+          rowCount: item.rowCount,
+          columnCount: item.columnCount,
+          note: '',
+        });
+        dataRows += 1;
+      }
+    } catch (err) {
+      sheet.addRow({
+        fileIndex: i + 1,
+        fileName: base,
+        filePath,
+        sheetCount: '',
+        sheetIndex: '',
+        sheetName: '',
+        rowCount: '',
+        columnCount: '',
+        note: err instanceof Error ? err.message : '읽기 실패',
+      });
+      dataRows += 1;
+    }
+  }
+
+  await wb.xlsx.writeFile(dest);
+  return { outputPath: dest, fileCount: list.length, rowCount: dataRows };
+}
+
+/**
  * 키 열 기준 가로 결합 (첫 파일 기준 왼쪽 조인 + 나머지 키는 아래 추가).
  * 시작 칸=헤더 행, 그 다음~끝 행=데이터. 같은 열이 키.
  * @param {string[]} paths
@@ -950,8 +1036,8 @@ export async function runExcelMerge(options) {
   const paths = (Array.isArray(options.paths) ? options.paths : [])
     .map((item) => path.resolve(String(item ?? '').trim()))
     .filter(Boolean);
-  if (paths.length < 2) {
-    throw new Error('병합하려면 Excel 파일이 2개 이상 필요합니다.');
+  if (paths.length < 1) {
+    throw new Error('병합할 Excel 파일을 추가해 주세요.');
   }
   for (const item of paths) {
     if (!isExcelFile(item)) {

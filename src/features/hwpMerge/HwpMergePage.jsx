@@ -158,6 +158,24 @@ export default function HwpMergePage() {
     });
   };
 
+  /** @param {'start' | 'end'} edge */
+  const moveSelectedToEdge = (edge) => {
+    if (!selected) return;
+    setPaths((current) => {
+      const index = current.indexOf(selected);
+      if (index < 0) return current;
+      if (edge === 'start' && index === 0) return current;
+      if (edge === 'end' && index === current.length - 1) return current;
+      const next = [...current];
+      const [item] = next.splice(index, 1);
+      if (edge === 'start') next.unshift(item);
+      else next.push(item);
+      return next;
+    });
+  };
+
+  const selectedIndex = selected ? paths.indexOf(selected) : -1;
+
   const removeSelected = () => {
     if (!selected) return;
     setPaths((current) => current.filter((item) => item !== selected));
@@ -288,7 +306,15 @@ export default function HwpMergePage() {
               <button
                 type="button"
                 className={btnClass}
-                disabled={busy || !selected}
+                disabled={busy || !selected || selectedIndex <= 0}
+                onClick={() => moveSelectedToEdge('start')}
+              >
+                맨위로
+              </button>
+              <button
+                type="button"
+                className={btnClass}
+                disabled={busy || !selected || selectedIndex <= 0}
                 onClick={() => moveSelected(-1)}
               >
                 위로
@@ -296,10 +322,18 @@ export default function HwpMergePage() {
               <button
                 type="button"
                 className={btnClass}
-                disabled={busy || !selected}
+                disabled={busy || !selected || selectedIndex < 0 || selectedIndex >= paths.length - 1}
                 onClick={() => moveSelected(1)}
               >
                 아래로
+              </button>
+              <button
+                type="button"
+                className={btnClass}
+                disabled={busy || !selected || selectedIndex < 0 || selectedIndex >= paths.length - 1}
+                onClick={() => moveSelectedToEdge('end')}
+              >
+                맨아래로
               </button>
               <button
                 type="button"

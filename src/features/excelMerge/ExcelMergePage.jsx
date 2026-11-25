@@ -33,7 +33,7 @@ const FALLBACK_MODES = [
   {
     id: 'append',
     label: '아래로 이어 붙이기',
-    hint: '선택한 시트들의 데이터를 한 시트에 위→아래로 붙입니다. 헤더 이름으로 열을 맞추거나, 열 위치로 붙일 수 있습니다.',
+    hint: '선택한 시트들의 데이터를 한 시트에 위→아래로 붙입니다. 파일 하나(여러 시트)만으로도 가능합니다. 헤더 이름으로 열을 맞추거나, 열 위치로 붙일 수 있습니다.',
   },
   {
     id: 'same_name',
@@ -418,6 +418,50 @@ export default function ExcelMergePage() {
     });
   };
 
+  /** @param {'start' | 'end'} edge */
+  const moveSelectedToEdge = (edge) => {
+    if (!selected) return;
+    setPaths((current) => {
+      const index = current.indexOf(selected);
+      if (index < 0) return current;
+      if (edge === 'start' && index === 0) return current;
+      if (edge === 'end' && index === current.length - 1) return current;
+      const next = [...current];
+      const [item] = next.splice(index, 1);
+      if (edge === 'start') next.unshift(item);
+      else next.push(item);
+      return next;
+    });
+  };
+
+  const selectedIndex = selected ? paths.indexOf(selected) : -1;
+
+  const exportSheetSummary = async () => {
+    if (paths.length === 0) {
+      void dialog.alert({ title: TITLE, body: '내보낼 Excel 파일을 먼저 추가해 주세요.' });
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await api('excelMerge.exportSheetSummary', { paths });
+      if (res?.cancelled) return;
+      await showExportDone({
+        dialog,
+        native,
+        title: '목록 저장 완료',
+        summary: `파일 ${res?.fileCount ?? paths.length}개 · 시트 행 ${res?.rowCount ?? 0}줄을 엑셀로 저장했습니다.`,
+        filePath: String(res?.outputPath || ''),
+      });
+    } catch (err) {
+      void dialog.alert({
+        title: TITLE,
+        body: err instanceof Error ? err.message : '목록 엑셀 저장에 실패했습니다.',
+      });
+    } finally {
+      setBusy(false);
+    }
+  };
+
   const removeSelected = () => {
     if (!selected) return;
     setPaths((current) => current.filter((item) => item !== selected));
@@ -440,8 +484,8 @@ export default function ExcelMergePage() {
   };
 
   const run = async () => {
-    if (paths.length < 2) {
-      void dialog.alert({ title: TITLE, body: '병합하려면 Excel 파일을 2개 이상 추가하세요.' });
+    if (paths.length < 1) {
+      void dialog.alert({ title: TITLE, body: '병합할 Excel 파일을 추가해 주세요.' });
       return;
     }
     if (mode === 'named' && !sheetFilterText.trim()) {
@@ -505,7 +549,10 @@ export default function ExcelMergePage() {
         dialog,
         native,
         title: '병합 완료',
-        summary: `${paths.length}개 Excel 파일을 하나로 합쳤습니다.`,
+        summary:
+          paths.length === 1
+            ? '선택한 Excel 파일을 처리했습니다.'
+            : `${paths.length}개 Excel 파일을 하나로 합쳤습니다.`,
         filePath: String(job?.outputPath || ''),
       });
     } catch (err) {
@@ -622,11 +669,37 @@ export default function ExcelMergePage() {
               <button type="button" className={btnClass} disabled={busy} onClick={() => void addFolder()}>
                 폴더 추가
               </button>
-              <button type="button" className={btnClass} disabled={busy || !selected} onClick={() => moveSelected(-1)}>
+              <button
+                type="button"
+                className={btnClass}
+                disabled={busy || !selected || selectedIndex <= 0}
+                onClick={() => moveSelectedToEdge('start')}
+              >
+                맨위로
+              </button>
+              <button
+                type="button"
+                className={btnClass}
+                disabled={busy || !selected || selectedIndex <= 0}
+                onClick={() => moveSelected(-1)}
+              >
                 위로
               </button>
-              <button type="button" className={btnClass} disabled={busy || !selected} onClick={() => moveSelected(1)}>
+              <button
+                type="button"
+                className={btnClass}
+                disabled={busy || !selected || selectedIndex < 0 || selectedIndex >= paths.length - 1}
+                onClick={() => moveSelected(1)}
+              >
                 아래로
+              </button>
+              <button
+                type="button"
+                className={btnClass}
+                disabled={busy || !selected || selectedIndex < 0 || selectedIndex >= paths.length - 1}
+                onClick={() => moveSelectedToEdge('end')}
+              >
+                맨아래로
               </button>
               <button type="button" className={btnClass} disabled={busy || !selected} onClick={removeSelected}>
                 선택 제거
@@ -645,6 +718,14 @@ export default function ExcelMergePage() {
               >
                 목록 비우기
               </button>
+              <button
+                type="button"
+                className={btnClass}
+                disabled={busy || paths.length === 0}
+                onClick={() => void exportSheetSummary()}
+              >
+                시트 정보 엑셀 저장
+              </button>
             </div>
             <div className="mt-3">
               <ToggleRow
@@ -656,7 +737,7 @@ export default function ExcelMergePage() {
               />
             </div>
             <p className="mt-2 text-xs text-slate-500">
-              {paths.length}개 · 결과는 .xlsx · 더블클릭으로 열기 · ▸ 로 시트별 행·열 수
+              {paths.length}개 · 결과는 .xlsx · 더블클릭으로 열기 · ▸ 로 시트별 행·열 수 · 「시트 정보 엑셀 저장」으로 목록 저장
             </p>
             {paths.length > 0 ? (
               <ul className="mt-3 max-h-72 overflow-auto rounded-lg border border-slate-200 divide-y divide-slate-100 bg-white">
@@ -980,7 +1061,7 @@ export default function ExcelMergePage() {
             <button
               type="button"
               className={btnPrimaryClass}
-              disabled={busy || paths.length < 2}
+              disabled={busy || paths.length < 1}
               onClick={() => void run()}
             >
               {busy ? '병합 중…' : '하나로 병합'}

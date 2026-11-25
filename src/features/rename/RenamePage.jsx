@@ -440,6 +440,17 @@ export default function RenamePage() {
     });
   };
 
+  /** 선택한 줄을 맨 위 또는 맨 아래로 옮깁니다. (선택 항목끼리 순서는 유지) */
+  const moveSelectedToEdge = (edge) => {
+    if (selected.size === 0) return;
+    setItems((prev) => {
+      const picked = prev.filter((item) => selected.has(item.id));
+      const rest = prev.filter((item) => !selected.has(item.id));
+      if (picked.length === 0) return prev;
+      return edge === 'start' ? [...picked, ...rest] : [...rest, ...picked];
+    });
+  };
+
   const sortList = () => {
     const collator = new Intl.Collator('ko', { numeric: sortNatural, sensitivity: 'base' });
     const valueOf = (item) => {
@@ -932,7 +943,7 @@ export default function RenamePage() {
               <Check checked={p.number.replaceName} onChange={(v) => setP('number', 'replaceName', v)}>기존 이름은 지우고 번호만 사용</Check>
               <Check checked={p.number.perFolder} onChange={(v) => setP('number', 'perFolder', v)}>폴더마다 번호 다시 시작</Check>
             </div>
-            <p className="m-0 text-xs text-slate-500">목록에 보이는 순서대로 번호가 붙습니다. 순서는 “목록 정렬”, “선택항목 위로/아래로”로 바꿀 수 있습니다.</p>
+            <p className="m-0 text-xs text-slate-500">목록에 보이는 순서대로 번호가 붙습니다. 순서는 “목록 정렬”, “선택항목 맨위/위/아래/맨아래”로 바꿀 수 있습니다.</p>
           </div>
         );
       case 'removeExt':
@@ -1022,8 +1033,10 @@ export default function RenamePage() {
     { label: '목록 지우기', color: 'blue', onClick: () => void clearList() },
     { label: '목록 정렬', color: 'blue', onClick: () => setModal('sort') },
     { label: '이름 직접 변경', color: 'blue', onClick: startEditSelected, title: '바뀔이름 칸을 더블클릭하거나 F2 로도 가능' },
+    { label: '선택항목 맨위로', color: 'blue', disabled: !hasSelection, onClick: () => moveSelectedToEdge('start') },
     { label: '선택항목 위로', color: 'blue', disabled: !hasSelection, onClick: () => moveSelected(-1) },
     { label: '선택항목 아래로', color: 'blue', disabled: !hasSelection, onClick: () => moveSelected(1) },
+    { label: '선택항목 맨아래로', color: 'blue', disabled: !hasSelection, onClick: () => moveSelectedToEdge('end') },
     { label: '한 폴더에 모으기', color: 'olive', onClick: () => void gather() },
     { label: '확장자 삭제', color: 'green', title: '확장자를 바로 지웁니다', onClick: () => runTool('removeExt') },
     { label: '확장자 추가', color: 'green', onClick: () => setModal('addExt') },

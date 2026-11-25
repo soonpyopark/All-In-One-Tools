@@ -4,6 +4,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { randomUUID } from 'node:crypto';
+import { app, BrowserWindow, dialog } from 'electron';
+import { APP_NAME } from '../../shared/constants.js';
 import { ApiError, defineApi } from '../api/registry.js';
 import { normalizeHeaderRange } from '../excel/headerRange.js';
 import {
@@ -25,12 +27,28 @@ import {
   SHEET_SCOPE_FIRST,
   detectHeaderFromFile,
   detectKeyRangeFromFile,
+  exportFileSheetSummary,
   inspectExcelFileSheets,
   isExcelFile,
   resolveOutputPath,
   runExcelMerge,
   sanitizeMergeName,
 } from '../excelMerge/mergeService.js';
+
+function appMainWindow() {
+  const wins = BrowserWindow.getAllWindows().filter((win) => !win.isDestroyed());
+  return (
+    wins.find((win) => win.getTitle().startsWith(APP_NAME) && !win.isFullScreen()) ??
+    wins.find((win) => !win.isFullScreen()) ??
+    null
+  );
+}
+
+function stamp() {
+  const d = new Date();
+  const p = (n) => String(n).padStart(2, '0');
+  return `${String(d.getFullYear()).slice(2)}${p(d.getMonth() + 1)}${p(d.getDate())}_${p(d.getHours())}${p(d.getMinutes())}${p(d.getSeconds())}`;
+}
 
 /**
  * @typedef {{
@@ -121,7 +139,7 @@ export function register() {
       {
         id: MODE_APPEND,
         label: '아래로 이어 붙이기',
-        hint: '선택한 시트들의 데이터를 한 시트에 위→아래로 붙입니다. 헤더 이름으로 열을 맞추거나, 열 위치로 붙일 수 있습니다.',
+        hint: '선택한 시트들의 데이터를 한 시트에 위→아래로 붙입니다. 파일 하나(여러 시트)만으로도 가능합니다. 헤더 이름으로 열을 맞추거나, 열 위치로 붙일 수 있습니다.',
       },
       {
         id: MODE_SAME_NAME,
@@ -201,6 +219,28 @@ export function register() {
     }
   });
 
+  defineApi('excelMerge.exportSheetSummary', async (body) => {
+    const paths = normalizePaths(body?.paths);
+    if (paths.length < 1) throw new ApiError('내보낼 Excel 파일을 먼저 추가해 주세요.');
+
+    const win = appMainWindow();
+    const defaultDir = path.dirname(paths[0]);
+    const save = await dialog.showSaveDialog(win ?? undefined, {
+      title: '파일·시트 목록 엑셀로 저장',
+      defaultPath: path.join(defaultDir, `파일시트목록_${stamp()}.xlsx`),
+      filters: [{ name: 'Excel Workbook', extensions: ['xlsx'] }],
+    });
+    if (save.canceled || !save.filePath) return { cancelled: true };
+    const outputPath = /\.xlsx$/i.test(save.filePath) ? save.filePath : `${save.filePath}.xlsx`;
+
+    try {
+      const result = await exportFileSheetSummary(paths, outputPath);
+      return { ok: true, ...result };
+    } catch (err) {
+      throw new ApiError(err instanceof Error ? err.message : '목록 엑셀 저장에 실패했습니다.');
+    }
+  });
+
   defineApi('excelMerge.resolveOutput', (body) => {
     const paths = normalizePaths(body?.paths);
     if (paths.length < 1) throw new ApiError('파일을 먼저 추가해 주세요.');
@@ -212,8 +252,8 @@ export function register() {
 
   defineApi('excelMerge.run', async (body) => {
     const paths = normalizePaths(body?.paths);
-    if (paths.length < 2) {
-      throw new ApiError('병합하려면 Excel 파일이 2개 이상 필요합니다.');
+    if (paths.length < 1) {
+      throw new ApiError('병합할 Excel 파일을 추가해 주세요.');
     }
     const outputName = sanitizeMergeName(body?.outputName);
     const outputDir = typeof body?.outputDir === 'string' ? body.outputDir.trim() : '';
