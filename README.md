@@ -4,7 +4,9 @@
 
 ![실행 화면](assets-src/screenshot-home.png)
 
-로컬 전용 Electron 도구 모음(매크로 & 화면 캡처(화면·창·영역 캡처, 키보드·마우스 매크로 프리셋), 이미지 자르기 & PDF 저장, PDF 중복페이지 정리, OCR 변환(PDF & 이미지), PDF 용량 줄이기, 파일명 일괄 변경, Movie2GIF 변환, GIF 이어붙이기, QR 코드 생성기, 피치 & 볼륨 조절, 서브넷 계산기, 런처, 시간 & 알람, Windows 시스템 관리(Windows 전용)). PDF 페이지 순서·합치기·서명 등 편집은 [Tiny PDF Editor](https://github.com/soonpyopark/Tiny-PDF-Editor/releases) 를 사용합니다. 런처에는 [출장 경로 찾기(Path Finder)](https://pathfinder-eight-pearl.vercel.app/) 기본 바로가기가 포함됩니다. 로그인·회원·웹 접속 없이 이 PC에서만 동작하며, **기능만 추가**하면 된다.
+로컬 전용 Electron 도구 모음입니다. 로그인·회원·웹 접속 없이 이 PC에서만 동작하며, **기능만 추가**하면 된다.
+
+포함 기능: 매크로 & 화면 캡처, 이미지 자르기 & PDF 저장, PDF 중복페이지 정리, OCR 변환(PDF & 이미지), PDF 용량 줄이기, 엑셀(Excel) 비교, 엑셀 파일 병합, 한글 파일 병합(Windows·한컴 한글), 파일명 일괄 변경, Movie2GIF 변환, GIF 이어붙이기, QR 코드 생성기, 피치 & 볼륨 조절, 날짜 계산기, 서브넷 계산기, 런처, 시간 & 알람, Windows 시스템 관리(Windows 전용). PDF 페이지 순서·합치기·서명 등 편집은 [Tiny PDF Editor](https://github.com/soonpyopark/Tiny-PDF-Editor/releases) 를 사용합니다. 런처에는 [출장 경로 찾기(Path Finder)](https://pathfinder-eight-pearl.vercel.app/) 기본 바로가기가 포함됩니다.
 
 ## 명령
 
@@ -16,7 +18,7 @@
 | `npm run dev:stop` | 이 프로젝트의 Electron 프로세스를 모두 종료 |
 | `npm run build:release` | Windows MSI + portable zip → `release/` |
 | `npm run build:release:mac` | macOS dmg → `release/` (macOS 에서만 실행 가능) |
-| `npm run version:bump` | 배포 버전 +1 (`APP_VERSION` `1.0.1.N`, `package.json` `1.0.1-N`). 옵션: `--set=1.1.0.0` `--sync` |
+| `npm run version:bump` | 배포 버전 +1 (`APP_VERSION` `1.0.2.N`, `package.json` `1.0.2-N`). 옵션: `--set=1.1.0.0` `--sync` |
 | `npm run publish:release` | 태그·GitHub Release 게시 + 이전 릴리스/태그 정리 (`--notes-file=` 또는 `--notes=`) |
 | `npm run update:all` | npm 의존성(`@latest`, 메이저 포함) + Electron + OCR 모델(upstream 해시 바뀌면 핀 갱신) 최신화 (`update_all.bat` 으로도 실행) |
 | `npm run build:update_all` | 최신화 + `build:release` (Windows) |
@@ -26,18 +28,24 @@
 
 산출물 이름: `AllTools_<YYMMDD_HHMMSS>_<arch>.msi`, `AllTools_portable_<stamp>_<arch>.zip`, `AllTools_<stamp>_<arch>.dmg`.
 
-서버·네트워크 포트가 없다. 화면과 기능 처리는 Electron 내부 통신(IPC)으로만 연결되므로 다른 PC·브라우저에서는 접근할 수 없다. 기본적으로 창을 닫으면 종료되며, 실행 중에 다시 실행해 여러 개를 동시에 띄울 수 있다. 환경설정에서 「닫으면 트레이로 보내기」를 켜면 창을 닫아도 트레이에 남고, 다시 실행하면 숨겨 둔 창이 다시 열린다. Windows 작업표시줄 아이콘은 `com.alltools.app` AppUserModelID 와 exe 내장 아이콘을 쓰도록 맞춰 두었다(재부팅 후 기본 아이콘으로 풀리는 현상 완화).
+서버·네트워크 포트가 없다. 화면과 기능 처리는 Electron 내부 통신(IPC)으로만 연결되므로 다른 PC·브라우저에서는 접근할 수 없다. 시작 시 스플래시가 잠깐 보이고, 상단 앱 이름을 눌러도 같은 형태의 정보 창을 연다. 기본적으로 창을 닫으면 종료되며, 실행 중에 다시 실행해 여러 개를 동시에 띄울 수 있다. 환경설정에서 「닫으면 트레이로 보내기」를 켜면 창을 닫아도 트레이에 남고, 다시 실행하면 숨겨 둔 창이 다시 열린다. Windows 작업표시줄 아이콘은 `com.alltools.app` AppUserModelID 와 exe 내장 아이콘을 쓰도록 맞춰 두었다(재부팅 후 기본 아이콘으로 풀리는 현상 완화).
+
+관리자 권한으로 실행하면 탐색기에서 드래그앤드롭으로 파일을 넣는 것이 Windows 보안(UIPI) 때문에 막힐 수 있다. 「파일 추가」「폴더 추가」 버튼은 그대로 된다.
 
 ## 구조
 
-- `main.js`, `preload.cjs` — Electron 진입점 (API 호출과 파일/폴더 선택 등 네이티브 기능은 preload 로 노출, 메인에서 요청 출처 검증)
+- `main.js`, `preload.cjs` — Electron 진입점 (API 호출과 파일/폴더 선택 등 네이티브 기능은 preload 로 노출, 메인에서 요청 출처 검증). 시작·정보 스플래시는 `electron/splash.js`
 - `electron/devRenderer.js` — 개발 시 화면을 `.dev-dist/` 로 감시 빌드 (운영은 `dist/` 를 파일로 로드)
 - `electron/api/coreApi.js` — 기본 API (앱 정보, 설정, 업데이트 확인)
-- `electron/modules/*` — 기능별 API (변환, 이미지 자르기·PDF 저장·PDF 정리, OCR 변환(PDF & 이미지), QR 코드 생성기, 매크로 & 화면 캡처, 파일명 일괄 변경, Windows 시스템 관리)
+- `electron/modules/*` — 기능별 API (변환, 이미지 자르기·PDF 저장·PDF 정리, OCR, QR, 매크로 & 화면 캡처, 파일명 일괄 변경, 엑셀 비교·병합, 한글 파일 병합, 시계·알람, Windows 시스템 관리 등)
 - Windows 시스템 관리: Windows 빌드에서만 메뉴에 표시. 제어판·컴퓨터관리·서비스·작업 스케줄러 바로가기(DnD 순서), 화면보호기 끄기 토글, 로컬 계정 비밀번호 변경, BitLocker 잠금·해제(관리자 권한).
+- 엑셀(Excel) 비교: 두 파일의 지정 컬럼으로 키를 맞춰 일치/불일치 행을 결과 시트에 색으로 표시. `.xls`/`.xlsb` 는 PC에 Excel이 있으면 서식을 유지해 옮긴다.
+- 엑셀 파일 병합: 시트로 모으기·아래로 이어 붙이기·같은 이름 시트끼리·지정 시트·키로 가로 결합·폴더 경로 시트. 파일 1개(여러 시트)만으로도 이어 붙이기 가능. 첨부 목록의 시트·행·열 수는 「시트 정보 엑셀 저장」으로 내려받을 수 있다.
+- 한글 파일 병합: HWP·HWPX를 순서대로 합침(Windows · 한컴 한글 COM). 용지 방향은 파일별로 유지.
 - QR 코드 생성기: Tiny QRcode Generator 와 같이 보내기(텍스트·URL → 단색 QR, 긴 텍스트 QRT1 압축) / 받기(화면 영역 드래그 → QR 인식)를 지원한다.
 - OCR 변환(PDF & 이미지): [Tiny PDF Editor](https://github.com/soonpyopark/Tiny-PDF-Editor/releases) 와 같은 PP-OCRv5 ONNX(`electron/ocr/`)로 검색 가능 글자 층을 붙인다. 이미지는 PDF 로 변환한 뒤 OCR 한다. 기본 한국어·영어, 다른 언어는 옵션(모델 다운로드). 모델은 `ocr/models/` (`npm run prepare:ocr`).
-- 파일명 일괄 변경: 이름 변환은 화면(`src/features/rename/ops.js`)에서 미리보기로 만들고, 실제 변경은 `rename.apply`(`electron/modules/rename.js`)가 전부 검증한 뒤 임시 이름을 거쳐 적용한다. 마지막 적용은 "실행 취소"로 되돌릴 수 있다.
+- 파일명 일괄 변경: 이름 변환은 화면(`src/features/rename/ops.js`)에서 미리보기로 만들고, 실제 변경은 `rename.apply`(`electron/modules/rename.js`)가 전부 검증한 뒤 임시 이름을 거쳐 적용한다. 마지막 적용은 "실행 취소"로 되돌릴 수 있다. 목록 순서는 맨위/위/아래/맨아래·목록 정렬로 조정한다.
+- 시간 & 알람: 현재 시각·타이머·알람. 목록에서 수정·저장 가능. 다른 메뉴에 있어도 알림이 울린다.
 - `electron/capture/*` — 매크로 & 화면 캡처: 화면·창·영역 캡처(`screenCapture.js`), 영역 선택 오버레이(`regionPicker.*`), 매크로 실행기(`macroRunner.js`, 키보드·마우스는 nut.js), 프리셋 저장(`presets.js` → `macros.json`)
 - `electron/settingsService.js` — 설정 저장
 - `shared/*` — 메인/화면 공용 코드 (`constants.js` 에 앱 이름·버전)
@@ -57,6 +65,7 @@
 - portable: exe 옆 `data` (zip 안에 `.portable` 표시 파일 포함)
 - 설치형: 사용자 데이터 폴더 아래 `data`
 - 매크로 & 화면 캡처의 프리셋은 같은 `data` 폴더의 `macros.json` 에 저장된다. 캡처 이미지의 기본 저장 위치는 `사진/All In One Tools`.
+- 알람·음원 경로는 같은 `data` 아래 시계 설정 파일에 저장된다.
 - `APP_DATA_DIR` 환경변수로 재지정 가능
 
 ## 앱 이름·버전 바꾸기
